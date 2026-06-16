@@ -12,13 +12,13 @@ enum WallpaperItemKind: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .motion:
-            "모션"
+            "Motion"
         case .video:
-            "동영상"
+            "Video"
         case .gif:
             "GIF"
         case .web:
-            "웹"
+            "Web"
         }
     }
 
@@ -86,9 +86,9 @@ enum VideoFillMode: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .cover:
-            "채우기"
+            "Fill"
         case .fit:
-            "맞춤"
+            "Fit"
         }
     }
 
@@ -111,9 +111,9 @@ enum DisplayMode: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .allDisplays:
-            "모든 모니터"
+            "All Displays"
         case .mainDisplay:
-            "메인 모니터"
+            "Main Display"
         }
     }
 }
@@ -128,11 +128,11 @@ enum PerformanceProfile: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .quality:
-            "품질"
+            "Quality"
         case .balanced:
-            "균형"
+            "Balanced"
         case .batterySaver:
-            "절전"
+            "Low Power"
         }
     }
 
@@ -169,11 +169,11 @@ enum PerformancePolicy: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .keepRunning:
-            "항상 재생"
+            "Always Play"
         case .pauseWhenCovered:
-            "큰 창이면 일시정지"
+            "Pause When Covered"
         case .stopWhenCovered:
-            "큰 창이면 정지"
+            "Stop When Covered"
         }
     }
 }
@@ -194,16 +194,16 @@ struct WallpaperLibraryItem: Codable, Equatable, Identifiable {
             return "\(motionScene.label) · \(motionPalette.label)"
         case .video:
             guard let videoPath else {
-                return "로컬 동영상"
+                return "Local Video"
             }
             return URL(fileURLWithPath: videoPath).lastPathComponent
         case .gif:
             guard let videoPath else {
-                return "로컬 GIF"
+                return "Local GIF"
             }
             return URL(fileURLWithPath: videoPath).lastPathComponent
         case .web:
-            return webURLString ?? "웹 URL"
+            return webURLString ?? "Web URL"
         }
     }
 

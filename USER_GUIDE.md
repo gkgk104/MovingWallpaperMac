@@ -1,262 +1,183 @@
-# Moving Wallpaper Mac 사용자 설명서
+# MotionDock User Guide
 
-## 앱 개요
+## Overview
 
-Moving Wallpaper Mac은 macOS에서 움직이는 배경화면처럼 사용할 수 있는 앱입니다. 샘플 모션, 로컬 동영상, GIF, 웹 URL을 배경으로 재생할 수 있고, 여러 모니터 적용, 성능 절약 옵션, 자체호스팅 마켓플레이스 업로드/다운로드를 제공합니다.
+MotionDock is a native macOS live wallpaper manager.
 
-macOS는 공개 API로 시스템 배경화면 자체를 동영상으로 바꾸는 기능을 제공하지 않습니다. 이 앱은 데스크톱 뒤쪽에 별도 창을 배치해 움직이는 배경처럼 보이게 합니다. 따라서 앱이 실행 중일 때만 움직이는 배경이 유지됩니다.
+Tagline:
 
-## 실행 방법
+```text
+Live wallpapers, made native for macOS.
+```
 
-1. `dist/Moving Wallpaper.app`을 실행합니다.
-2. macOS 보안 경고가 나오면 Finder에서 앱을 우클릭한 뒤 `열기`를 선택합니다.
-3. 앱 창이 열리면 왼쪽 `Library`에서 사용할 배경을 선택합니다.
-4. 오른쪽 하단의 `시작` 버튼을 누릅니다.
-5. 움직이는 배경을 끄려면 `정지` 버튼을 누르거나 앱을 종료합니다.
+It supports built-in motion wallpapers, local MP4/MOV/GIF files, web URL wallpapers, favorites, profiles, multi-display playback, performance policies, and a local self-hosted marketplace server.
 
-## 화면 구성
+## Launch
 
-### Library
+1. Open `dist/MotionDock.app`.
+2. If macOS blocks the local build, open it from Finder with Right Click -> Open.
+3. Select a wallpaper from Library.
+4. Press `Start Wallpaper` in the inspector.
+5. Press `Stop` to stop the live wallpaper.
 
-왼쪽 영역입니다. 사용할 배경 목록을 보여줍니다.
+## Main Layout
 
-- `Aurora Ribbons`: 기본 모션 프리셋입니다.
-- `Orbit Flow`: 원형 움직임 중심의 모션 프리셋입니다.
-- `Signal Mesh`: 선형 메쉬 느낌의 모션 프리셋입니다.
-- 사용자가 추가한 동영상, GIF, 웹 배경과 마켓플레이스에서 받은 배경도 이 목록에 표시됩니다.
+MotionDock uses a three-column layout.
 
-### Wallpaper
+### Sidebar
 
-선택한 배경의 세부 정보를 보여줍니다.
+- `Library`: all available wallpapers.
+- `Collections`: built-in motion collections.
+- `Favorites`: wallpapers marked as favorites.
+- `Recently Added`: imported wallpapers.
+- `Discover`: placeholder for curated wallpapers.
+- `Profiles`: local profile used for upload attribution.
+- `Settings`: playback, performance, and marketplace settings.
 
-- `종류`: 모션, 동영상, GIF, 웹 중 어떤 배경인지 표시합니다.
-- `정보`: 프리셋 이름, 영상/GIF 파일명, 웹 URL을 표시합니다.
-- `프리셋`: 모션 배경의 움직임 스타일을 선택합니다.
-- `팔레트`: 모션 배경의 색상 조합을 선택합니다.
+### Center Grid
+
+The center area shows large wallpaper cards with:
+
+- Thumbnail
+- Title
+- File type badge
+- Resolution badge
+- Running indicator
+- Hover animation
+- Selected state
+
+Use the search field to filter visible wallpapers.
+
+### Inspector
+
+The right inspector shows:
+
+- Large preview image
+- Title
+- Status
+- Resolution
+- Duration
+- File type
+- File name
+
+Actions:
+
+- `Start Wallpaper`
+- `Stop`
+- `Reveal in Finder`
+- `Add to Favorites`
+- `Remove from Library` for user-imported items
+
+## Import Wallpaper
+
+Use `Import Wallpaper` in the Library header.
+
+Supported local formats:
+
+- MP4
+- MOV
+- GIF
+
+The `URL` button next to `Import Wallpaper` opens URL import for web wallpapers. The URL field is only shown when URL import is selected.
+
+## Discover
+
+The Discover page currently shows:
+
+```text
+Discover curated motion wallpapers soon.
+```
+
+## Profiles
+
+Profiles are local to this Mac for now.
+
+1. Open `Profiles`.
+2. Enter a display name.
+3. Optionally enter a handle.
+4. Press `Create Profile`.
+
+Marketplace uploads include the profile display name and profile ID.
+
+## Settings
 
 ### Playback
 
-재생 방식 설정입니다.
-
-- `모니터`
-  - `모든 모니터`: 연결된 모든 디스플레이에 배경을 적용합니다.
-  - `메인 모니터`: 현재 메인 디스플레이에만 적용합니다.
-- `음소거`: 동영상 또는 웹 배경의 소리를 끕니다.
-- `비율`
-  - `채우기`: 화면을 꽉 채우며 일부가 잘릴 수 있습니다.
-  - `맞춤`: 전체 영상이 보이게 맞추며 여백이 생길 수 있습니다.
-- `순환`: 라이브러리 항목을 일정 시간마다 자동으로 넘깁니다.
-- `10분`: 순환 간격입니다. `순환`을 켜면 조절할 수 있습니다.
+- `Display`: all displays or main display.
+- `Audio`: mute video and web wallpapers.
+- `Scale`: fill or fit.
+- `Playlist`: cycle through wallpapers automatically.
 
 ### Performance
 
-성능과 배터리 사용량을 조절합니다.
+- `Quality`: smoother rendering.
+- `Balanced`: default.
+- `Low Power`: lower animation cost.
+- `Always Play`: keep running under other windows.
+- `Pause When Covered`: pause when a large foreground window covers the display.
+- `Stop When Covered`: release wallpaper windows when covered.
 
-- `프로필`
-  - `품질`: 가장 부드러운 모션을 우선합니다.
-  - `균형`: 기본 권장값입니다.
-  - `절전`: 배터리 사용량을 줄입니다.
-- `정책`
-  - `항상 재생`: 다른 큰 창이 떠 있어도 계속 재생합니다.
-  - `큰 창이면 일시정지`: 화면을 크게 덮는 앱이 있으면 배경 재생을 멈춥니다.
-  - `큰 창이면 정지`: 화면을 크게 덮는 앱이 있으면 배경 창을 닫아 자원 사용을 줄입니다.
+### Self-hosted Marketplace
 
-### Profile
+The marketplace server is an advanced local feature.
 
-마켓플레이스 업로드에 사용할 작성자 프로필을 설정합니다.
-
-- `이름`: 마켓플레이스에 표시할 이름입니다.
-- `핸들`: 선택 입력값입니다. 입력하면 `이름 (@handle)` 형식으로 표시됩니다.
-- `작성자`: 실제 업로드에 함께 저장되는 표시 이름입니다.
-- `ID`: 이 앱 설치에 저장되는 작성자 ID입니다.
-- `로그인`: 현재 프로필로 업로드를 허용합니다.
-- `로그아웃`: 업로드를 막고 프로필을 로그아웃 상태로 바꿉니다.
-
-### Marketplace
-
-오른쪽 영역입니다. 자체호스팅 서버에 올라간 배경을 보고, 받을 수 있습니다.
-
-- 서버 주소: 기본값은 `http://127.0.0.1:8787`입니다.
-- `새로고침`: 서버의 배경 목록을 다시 불러옵니다.
-- `업로드`: 로그인한 프로필 이름으로 현재 선택된 로컬 동영상 또는 GIF를 서버에 업로드합니다. 기본 모션 프리셋과 웹 배경은 업로드하지 않습니다.
-- `받기`: 서버 파일을 내려받고 `Library`에 추가합니다.
-- `받고 적용`: 내려받은 뒤 바로 선택하고 실행합니다.
-
-받은 파일은 아래 폴더에 저장됩니다.
-
-```text
-~/Library/Application Support/Moving Wallpaper/Marketplace Downloads/
-```
-
-## 동영상 또는 GIF 배경 추가
-
-1. 왼쪽 아래 `Media` 버튼을 누릅니다.
-2. `.mp4`, `.mov` 등 macOS AVFoundation이 지원하는 동영상 또는 `.gif` 파일을 선택합니다.
-3. 추가된 항목이 `Library`에 표시됩니다.
-4. 항목을 선택한 뒤 `시작`을 누릅니다.
-
-동영상이 재생되지 않으면 파일이 손상됐거나 macOS에서 지원하지 않는 코덱일 수 있습니다. 같은 파일을 QuickTime Player에서 열 수 있는지 확인하세요.
-
-GIF는 AppKit 이미지 뷰로 표시됩니다. `비율` 설정에서 `채우기`를 선택하면 화면을 꽉 채우고, `맞춤`을 선택하면 GIF 전체가 보이도록 맞춥니다.
-
-## 웹 배경 추가
-
-1. 왼쪽 아래 입력칸에 웹 주소를 입력합니다.
-2. 예: `https://example.com`
-3. `+` 버튼을 누릅니다.
-4. 추가된 웹 항목을 선택하고 `시작`을 누릅니다.
-
-웹 배경은 사이트의 보안 정책, 자동재생 제한, 로그인 필요 여부에 영향을 받을 수 있습니다. 안정적인 배경으로 쓰려면 로그인이나 팝업이 필요 없는 페이지를 권장합니다.
-
-## 마켓플레이스 서버 실행
-
-마켓플레이스를 쓰려면 별도 터미널에서 서버를 먼저 켭니다. 마켓플레이스를 쓰는 동안 이 터미널을 열어 둡니다.
+Start it:
 
 ```bash
 cd /Users/leehyunbin/codes/MovingWallpaperMac
 ./scripts/start-marketplace-server.sh
 ```
 
-서버를 끄려면 서버 터미널에서 `Control-C`를 누르거나 아래 명령을 실행합니다.
+Stop it:
 
 ```bash
 ./scripts/stop-marketplace-server.sh
 ```
 
-터미널에 붙여서 직접 실행하려면 아래 명령을 사용할 수도 있습니다.
-
-```bash
-cd /Users/leehyunbin/codes/MovingWallpaperMac/marketplace-server
-node server.js
-```
-
-다른 터미널에서 앱을 실행하거나 이미 켜진 앱의 `Marketplace` 주소에 아래 값을 넣습니다.
+Default URL:
 
 ```text
 http://127.0.0.1:8787
 ```
 
-같은 네트워크의 다른 Mac에서도 받게 하려면 서버를 아래처럼 실행하고, 앱에는 서버 Mac의 IP 주소를 넣습니다.
-
-```bash
-HOST=0.0.0.0 PORT=8787 node server.js
-```
-
-예:
+Downloaded files are stored at:
 
 ```text
-http://192.168.0.10:8787
+~/Library/Application Support/MotionDock/Marketplace Downloads/
 ```
 
-서버 저장 위치는 아래와 같습니다.
+## Troubleshooting
 
-```text
-/Users/leehyunbin/codes/MovingWallpaperMac/marketplace-server/data/
-```
+### Wallpaper Does Not Start
 
-## 항목 삭제
+- Make sure a wallpaper is selected.
+- Check that local files still exist.
+- Try another MP4, MOV, or GIF.
+- Change Settings -> Performance -> Policy to `Always Play` for testing.
 
-1. `Library`에서 사용자가 추가한 동영상, GIF, 웹 항목을 선택합니다.
-2. 휴지통 버튼을 누릅니다.
+### Video Does Not Play
 
-기본 모션 프리셋은 삭제할 수 없습니다.
+- Confirm the file opens in QuickTime Player.
+- Use MP4 or MOV with a codec supported by macOS AVFoundation.
 
-## 권장 설정
+### GIF Does Not Appear
 
-### 전원 연결 중
+- Confirm the file extension is `.gif`.
+- Check that Finder Preview or Safari can open the GIF.
 
-- 프로필: `품질` 또는 `균형`
-- 정책: `항상 재생` 또는 `큰 창이면 일시정지`
-- 모니터: 원하는 범위 선택
+### Dock Click Does Not Restore the Window
 
-### 배터리 사용 중
+MotionDock tracks its main control window separately from wallpaper render windows. If Dock restore ever fails after a rebuild, quit MotionDock and open `dist/MotionDock.app` again.
 
-- 프로필: `절전`
-- 정책: `큰 창이면 일시정지`
-- 동영상은 가능하면 1080p 이하 권장
-- 큰 GIF 파일은 배터리 사용량이 늘 수 있으므로 파일 크기가 작은 GIF를 권장
+### Battery Use Is High
 
-### 여러 모니터 사용 중
+- Use `Low Power`.
+- Use `Pause When Covered`.
+- Prefer 1080p video over 4K or 60fps video.
+- Use Main Display instead of All Displays on battery.
 
-- 고해상도 모니터가 여러 대라면 `균형` 또는 `절전`을 권장합니다.
-- 4K 60fps 영상은 배터리와 GPU 사용량이 커질 수 있습니다.
+## Limits
 
-## 문제 해결
-
-### 버튼을 눌러도 배경이 안 보이는 경우
-
-- `시작` 버튼을 눌렀는지 확인합니다.
-- 다른 앱이 전체 화면을 덮고 있으면 성능 정책 때문에 일시정지됐을 수 있습니다.
-- `정책`을 `항상 재생`으로 바꿔 테스트합니다.
-
-### 동영상이 안 나오는 경우
-
-- 파일 경로가 바뀌었거나 삭제되지 않았는지 확인합니다.
-- QuickTime Player에서 같은 파일이 재생되는지 확인합니다.
-- 다른 `.mp4` 또는 `.mov` 파일로 테스트합니다.
-
-### GIF가 안 나오는 경우
-
-- 파일 확장자가 `.gif`인지 확인합니다.
-- 파일 경로가 바뀌었거나 삭제되지 않았는지 확인합니다.
-- Finder 미리보기 또는 Safari에서 같은 GIF가 움직이는지 확인합니다.
-
-### 웹 배경이 안 나오는 경우
-
-- URL이 `https://` 또는 `http://`로 시작하는지 확인합니다.
-- 로그인, 팝업, 자동재생 제한이 있는 사이트는 배경으로 적합하지 않을 수 있습니다.
-- 간단한 정적 페이지나 애니메이션 페이지로 테스트합니다.
-
-### 마켓플레이스 목록이 안 나오는 경우
-
-- `marketplace-server`에서 `node server.js`가 실행 중인지 확인합니다.
-- 앱의 서버 주소가 `http://127.0.0.1:8787`인지 확인합니다.
-- 다른 Mac에서 접속한다면 서버를 `HOST=0.0.0.0`으로 실행하고 방화벽 설정을 확인합니다.
-- 서버 터미널에 오류가 찍히는지 확인합니다.
-
-### 마켓플레이스 업로드가 안 되는 경우
-
-- `Profile` 탭에서 표시 이름을 입력하고 로그인했는지 확인합니다.
-- 업로드할 항목이 사용자가 추가한 로컬 동영상 또는 GIF인지 확인합니다.
-- 파일이 이동되거나 삭제되지 않았는지 확인합니다.
-
-### 배터리가 빨리 줄어드는 경우
-
-- `프로필`을 `절전`으로 바꿉니다.
-- `정책`을 `큰 창이면 일시정지`로 설정합니다.
-- 4K 또는 60fps 동영상 대신 1080p 영상을 사용합니다.
-- 여러 모니터 대신 `메인 모니터`만 사용합니다.
-
-### 앱을 끄면 배경이 사라지는 경우
-
-정상 동작입니다. 이 앱은 시스템 배경화면 파일을 바꾸는 방식이 아니라 실행 중인 앱 창으로 움직이는 배경을 표시합니다.
-
-## 빌드해서 다시 만들기
-
-소스 코드를 수정한 뒤 앱 번들을 다시 만들려면 터미널에서 아래 명령을 실행합니다.
-
-```bash
-cd /Users/leehyunbin/codes/MovingWallpaperMac
-./scripts/build-app.sh
-```
-
-빌드가 끝나면 아래 위치에 앱이 생성됩니다.
-
-```text
-/Users/leehyunbin/codes/MovingWallpaperMac/dist/Moving Wallpaper.app
-```
-
-## 지원 파일 형식
-
-- 동영상: `.mp4`, `.mov`, `.m4v`, `.webm`, `.avi`
-- GIF: `.gif`
-- 웹 배경: `http://` 또는 `https://` URL
-
-동영상은 macOS AVFoundation이 실제로 디코딩할 수 있는 코덱이어야 합니다.
-
-## 제한 사항
-
-- 마켓플레이스 서버는 로컬/사내/개인 네트워크용 샘플 서버입니다. 앱의 프로필 로그인은 작성자 표시용 로컬 프로필이며, 실제 계정 인증, 권한, 검수, 결제, 신고 기능은 포함되어 있지 않습니다.
-- macOS 공개 API 제약 때문에 시스템 배경화면 자체를 영구적으로 동영상으로 바꾸지는 않습니다.
-- 전체 화면 Space, Mission Control, 일부 데스크톱 관리 앱에서는 보이는 방식이 달라질 수 있습니다.
-- 웹 배경은 사이트별 정책에 따라 자동재생이나 미디어 표시가 제한될 수 있습니다.
+- MotionDock renders live wallpaper windows; it does not permanently replace the macOS system wallpaper file.
+- Full-screen Spaces and Mission Control can change how desktop-level windows are presented.
+- The marketplace server is not production-ready authentication infrastructure.

@@ -28,7 +28,7 @@ struct MarketplaceItem: Codable, Equatable, Identifiable {
 
     var uploaderDisplayText: String {
         let trimmed = uploaderName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? "알 수 없음" : trimmed
+        return trimmed.isEmpty ? "Unknown" : trimmed
     }
 
     private static func formattedSize(_ bytes: Int) -> String {
@@ -50,15 +50,15 @@ enum MarketplaceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidServerURL:
-            return "마켓플레이스 서버 주소가 올바르지 않습니다."
+            return "The marketplace server URL is invalid."
         case .unsupportedUpload:
-            return "마켓플레이스 업로드는 로컬 동영상과 GIF만 지원합니다."
+            return "Marketplace uploads support local video files and GIFs."
         case .unsupportedDownload:
-            return "이 마켓플레이스 항목은 현재 앱에서 지원하지 않는 형식입니다."
+            return "This marketplace item is not supported."
         case .missingLocalFile:
-            return "업로드할 로컬 파일을 찾을 수 없습니다."
+            return "The local file could not be found."
         case .invalidResponse:
-            return "마켓플레이스 서버 응답을 읽을 수 없습니다."
+            return "The marketplace server response could not be read."
         case .server(let message):
             return message
         }

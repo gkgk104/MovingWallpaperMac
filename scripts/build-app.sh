@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="Moving Wallpaper"
+APP_NAME="MotionDock"
 BINARY_NAME="MovingWallpaperMac"
 APP_DIR="$ROOT_DIR/dist/$APP_NAME.app"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/moving-wallpaper-build.XXXXXX")"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/motiondock-build.XXXXXX")"
 TMP_APP_DIR="$TMP_ROOT/$APP_NAME.app"
 PLIST="$TMP_APP_DIR/Contents/Info.plist"
 
@@ -24,7 +24,7 @@ cp ".build/release/$BINARY_NAME" "$TMP_APP_DIR/Contents/MacOS/$BINARY_NAME"
 /usr/bin/plutil -create xml1 "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" "$PLIST"
-/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string local.codex.moving-wallpaper" "$PLIST"
+/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string local.codex.motiondock" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string $BINARY_NAME" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string APPL" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.0" "$PLIST"

@@ -49,6 +49,11 @@ final class AppModel: ObservableObject {
     }
     @Published private(set) var profileID: String
     @Published var profileMessage: String?
+    @Published var favoriteItemIDs: Set<String> {
+        didSet {
+            UserDefaults.standard.set(Array(favoriteItemIDs), forKey: DefaultsKey.favoriteItemIDs)
+        }
+    }
 
     @Published var playlistEnabled: Bool {
         didSet {
@@ -131,12 +136,16 @@ final class AppModel: ObservableObject {
         selectedItem?.isBuiltIn == false
     }
 
+    var canRevealSelectedItem: Bool {
+        selectedLocalFileURL != nil
+    }
+
     var profileDisplayText: String {
         let displayName = normalizedProfileDisplayName
         let handle = normalizedProfileHandle
 
         guard !displayName.isEmpty else {
-            return "로그인 필요"
+            return "Sign in required"
         }
 
         return handle.isEmpty ? displayName : "\(displayName) (@\(handle))"
@@ -173,6 +182,7 @@ final class AppModel: ObservableObject {
         profileHandle = defaults.string(forKey: DefaultsKey.profileHandle) ?? ""
         profileIsLoggedIn = defaults.object(forKey: DefaultsKey.profileIsLoggedIn) as? Bool ?? false
         profileID = Self.loadProfileID(from: defaults)
+        favoriteItemIDs = Set(defaults.stringArray(forKey: DefaultsKey.favoriteItemIDs) ?? [])
 
         NotificationCenter.default.publisher(for: NSNotification.Name.NSProcessInfoPowerStateDidChange)
             .sink { [weak self] _ in
@@ -193,16 +203,14 @@ final class AppModel: ObservableObject {
     func addMediaFiles() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [
-            .movie,
             .mpeg4Movie,
             .quickTimeMovie,
-            .video,
             .gif
         ]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.title = "라이브러리에 추가할 동영상 또는 GIF 선택"
+        panel.title = "Import Wallpaper"
 
         guard panel.runModal() == .OK else {
             return
@@ -233,14 +241,14 @@ final class AppModel: ObservableObject {
     func addWebsite() {
         let trimmed = webURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            schedule { $0.errorMessage = "올바른 웹 URL을 입력하세요." }
+            schedule { $0.errorMessage = "Enter a valid URL." }
             return
         }
 
         let normalized = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
 
         guard let url = URL(string: normalized), Self.isSupportedWebURL(url) else {
-            schedule { $0.errorMessage = "올바른 웹 URL을 입력하세요." }
+            schedule { $0.errorMessage = "Enter a valid URL." }
             return
         }
 
@@ -284,22 +292,43 @@ final class AppModel: ObservableObject {
         schedule { model in
             let displayName = model.normalizedProfileDisplayName
             guard !displayName.isEmpty else {
-                model.profileMessage = "표시 이름을 입력하세요."
+                model.profileMessage = "Enter a display name."
                 return
             }
 
             model.profileDisplayName = displayName
             model.profileHandle = model.normalizedProfileHandle
             model.profileIsLoggedIn = true
-            model.profileMessage = "로그인되었습니다."
+            model.profileMessage = "Profile is active."
         }
     }
 
     func signOutProfile() {
         schedule { model in
             model.profileIsLoggedIn = false
-            model.profileMessage = "로그아웃되었습니다."
+            model.profileMessage = "Profile signed out."
         }
+    }
+
+    func isFavorite(_ item: WallpaperLibraryItem) -> Bool {
+        favoriteItemIDs.contains(item.id)
+    }
+
+    func toggleFavorite(_ item: WallpaperLibraryItem) {
+        schedule { model in
+            if model.favoriteItemIDs.contains(item.id) {
+                model.favoriteItemIDs.remove(item.id)
+            } else {
+                model.favoriteItemIDs.insert(item.id)
+            }
+        }
+    }
+
+    func revealSelectedInFinder() {
+        guard let url = selectedLocalFileURL else {
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     func removeSelectedItem() {
@@ -486,7 +515,7 @@ final class AppModel: ObservableObject {
     private func makeConfiguration(setError: Bool) -> WallpaperConfiguration? {
         guard let selectedItem else {
             if setError {
-                errorMessage = "라이브러리 아이템이 없습니다."
+                errorMessage = "No wallpaper is selected."
             }
             return nil
         }
@@ -504,7 +533,7 @@ final class AppModel: ObservableObject {
         case .video:
             guard let videoPath = selectedItem.videoPath, !videoPath.isEmpty else {
                 if setError {
-                    errorMessage = "동영상 경로가 비어 있습니다."
+                    errorMessage = "The video path is empty."
                 }
                 return nil
             }
@@ -512,7 +541,7 @@ final class AppModel: ObservableObject {
             let url = URL(fileURLWithPath: videoPath)
             guard FileManager.default.fileExists(atPath: url.path) else {
                 if setError {
-                    errorMessage = "선택한 동영상 파일을 찾을 수 없습니다."
+                    errorMessage = "The selected video file could not be found."
                 }
                 return nil
             }
@@ -528,7 +557,7 @@ final class AppModel: ObservableObject {
         case .gif:
             guard let gifPath = selectedItem.videoPath, !gifPath.isEmpty else {
                 if setError {
-                    errorMessage = "GIF 경로가 비어 있습니다."
+                    errorMessage = "The GIF path is empty."
                 }
                 return nil
             }
@@ -536,7 +565,7 @@ final class AppModel: ObservableObject {
             let url = URL(fileURLWithPath: gifPath)
             guard FileManager.default.fileExists(atPath: url.path) else {
                 if setError {
-                    errorMessage = "선택한 GIF 파일을 찾을 수 없습니다."
+                    errorMessage = "The selected GIF file could not be found."
                 }
                 return nil
             }
@@ -552,7 +581,7 @@ final class AppModel: ObservableObject {
         case .web:
             guard let urlString = selectedItem.webURLString, let url = URL(string: urlString) else {
                 if setError {
-                    errorMessage = "웹 URL을 읽을 수 없습니다."
+                    errorMessage = "The web URL could not be loaded."
                 }
                 return nil
             }
@@ -583,7 +612,7 @@ final class AppModel: ObservableObject {
             let (data, response) = try await URLSession.shared.data(from: listURL)
             try validate(response: response, data: data)
             marketplaceItems = try JSONDecoder().decode([MarketplaceItem].self, from: data)
-            marketplaceMessage = marketplaceItems.isEmpty ? "마켓플레이스에 아직 업로드된 배경이 없습니다." : nil
+            marketplaceMessage = marketplaceItems.isEmpty ? "No marketplace wallpapers yet." : nil
         } catch {
             marketplaceMessage = error.localizedDescription
         }
@@ -595,7 +624,7 @@ final class AppModel: ObservableObject {
             return
         }
         guard profileIsLoggedIn else {
-            marketplaceMessage = "프로필 탭에서 로그인한 뒤 업로드할 수 있습니다."
+            marketplaceMessage = "Sign in from Profiles before uploading."
             return
         }
         guard let selectedItem, selectedItem.kind == .video || selectedItem.kind == .gif else {
@@ -608,7 +637,7 @@ final class AppModel: ObservableObject {
         }
 
         marketplaceIsLoading = true
-        marketplaceMessage = "업로드 중..."
+        marketplaceMessage = "Uploading..."
         defer { marketplaceIsLoading = false }
 
         do {
@@ -634,7 +663,7 @@ final class AppModel: ObservableObject {
 
             let (data, response) = try await URLSession.shared.upload(for: request, from: body)
             try validate(response: response, data: data)
-            marketplaceMessage = "업로드 완료"
+            marketplaceMessage = "Upload complete."
             await refreshMarketplaceNow()
         } catch {
             marketplaceMessage = error.localizedDescription
@@ -656,7 +685,7 @@ final class AppModel: ObservableObject {
         }
 
         marketplaceBusyItemID = item.id
-        marketplaceMessage = apply ? "다운로드 후 적용 중..." : "다운로드 중..."
+        marketplaceMessage = apply ? "Downloading and applying..." : "Downloading..."
         defer { marketplaceBusyItemID = nil }
 
         do {
@@ -682,7 +711,7 @@ final class AppModel: ObservableObject {
             }
 
             setSelectedItem(libraryItem.id, restart: false)
-            marketplaceMessage = apply ? "다운로드 및 적용 완료" : "라이브러리에 추가 완료"
+            marketplaceMessage = apply ? "Downloaded and applied." : "Added to Library."
 
             if apply {
                 startNow()
@@ -711,6 +740,15 @@ final class AppModel: ObservableObject {
             .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
     }
 
+    private var selectedLocalFileURL: URL? {
+        guard let path = selectedItem?.videoPath, !path.isEmpty else {
+            return nil
+        }
+
+        let url = URL(fileURLWithPath: path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     private func saveDownloadedMarketplaceFile(data: Data, item: MarketplaceItem) throws -> URL {
         let directory = try marketplaceDownloadsDirectory()
         let filename = safeFilename("\(item.id)-\(item.filename)")
@@ -727,7 +765,7 @@ final class AppModel: ObservableObject {
             create: true
         )
         let directory = base
-            .appendingPathComponent("Moving Wallpaper", isDirectory: true)
+            .appendingPathComponent("MotionDock", isDirectory: true)
             .appendingPathComponent("Marketplace Downloads", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
@@ -793,7 +831,7 @@ final class AppModel: ObservableObject {
             if let serverError = try? JSONDecoder().decode(MarketplaceServerError.self, from: data) {
                 throw MarketplaceError.server(serverError.error)
             }
-            throw MarketplaceError.server("마켓플레이스 서버 오류: HTTP \(httpResponse.statusCode)")
+            throw MarketplaceError.server("Marketplace server error: HTTP \(httpResponse.statusCode)")
         }
     }
 
@@ -1030,6 +1068,7 @@ private enum DefaultsKey {
     static let profileHandle = "profileHandle"
     static let profileIsLoggedIn = "profileIsLoggedIn"
     static let profileID = "profileID"
+    static let favoriteItemIDs = "favoriteItemIDs"
     static let isMuted = "isMuted"
     static let fillMode = "fillMode"
 }

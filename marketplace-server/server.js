@@ -80,7 +80,7 @@ function publicItem(item) {
     size: item.size,
     createdAt: item.createdAt,
     downloadURL: `/files/${encodeURIComponent(item.storedName)}`,
-    uploaderName: item.uploaderName || "알 수 없음",
+    uploaderName: item.uploaderName || "Unknown",
     uploaderID: item.uploaderID || ""
   };
 }
@@ -209,7 +209,7 @@ async function handleUpload(request, response) {
     storedName,
     size: filePart.content.length,
     createdAt: new Date().toISOString(),
-    uploaderName: cleanText(fields.get("uploaderName"), "알 수 없음"),
+    uploaderName: cleanText(fields.get("uploaderName"), "Unknown"),
     uploaderID: cleanText(fields.get("uploaderID"), "", 120)
   };
 
@@ -269,7 +269,7 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "GET" && url.pathname === "/") {
     sendJSON(response, 200, {
-      name: "Moving Wallpaper Marketplace",
+      name: "MotionDock Marketplace",
       endpoints: ["/api/wallpapers", "/files/:storedName"]
     });
     return;
@@ -279,5 +279,5 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Moving Wallpaper Marketplace running at http://${host}:${port}`);
+  console.log(`MotionDock Marketplace running at http://${host}:${port}`);
 });

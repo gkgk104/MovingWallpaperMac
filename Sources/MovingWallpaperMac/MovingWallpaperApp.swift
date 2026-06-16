@@ -7,14 +7,14 @@ struct MovingWallpaperApp: App {
     @StateObject private var model = AppModel()
 
     var body: some Scene {
-        Window("Moving Wallpaper", id: "main") {
+        Window("MotionDock", id: "main") {
             ContentView(model: model)
                 .frame(
-                    minWidth: 1040,
-                    idealWidth: 1120,
+                    minWidth: 920,
+                    idealWidth: 1180,
                     maxWidth: .infinity,
-                    minHeight: 520,
-                    idealHeight: 560,
+                    minHeight: 640,
+                    idealHeight: 720,
                     maxHeight: .infinity
                 )
                 .background(MainWindowAccessor())
@@ -73,6 +73,8 @@ private final class MainWindowRegistry {
 
         mainWindow = window
         window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 920, height: 640)
+        constrainToVisibleScreen(window)
     }
 
     func restoreMainWindowIfNeeded(in application: NSApplication) {
@@ -99,6 +101,7 @@ private final class MainWindowRegistry {
             window.deminiaturize(nil)
         }
 
+        constrainToVisibleScreen(window)
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
         application.activate(ignoringOtherApps: true)
@@ -109,6 +112,33 @@ private final class MainWindowRegistry {
             return false
         }
 
-        return window.title == "Moving Wallpaper" && window.canBecomeKey
+        return window.title == "MotionDock" && window.canBecomeKey
+    }
+
+    private func constrainToVisibleScreen(_ window: NSWindow) {
+        guard let screen = window.screen ?? NSScreen.main else {
+            return
+        }
+
+        let visibleFrame = screen.visibleFrame.insetBy(dx: 10, dy: 10)
+        var frame = window.frame
+
+        if frame.width > visibleFrame.width {
+            frame.size.width = visibleFrame.width
+        }
+
+        if frame.height > visibleFrame.height {
+            frame.size.height = visibleFrame.height
+        }
+
+        if frame.minX < visibleFrame.minX || frame.maxX > visibleFrame.maxX {
+            frame.origin.x = visibleFrame.midX - frame.width / 2
+        }
+
+        if frame.minY < visibleFrame.minY || frame.maxY > visibleFrame.maxY {
+            frame.origin.y = visibleFrame.midY - frame.height / 2
+        }
+
+        window.setFrame(frame, display: true)
     }
 }
