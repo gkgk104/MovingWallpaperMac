@@ -20,6 +20,8 @@ It supports built-in motion wallpapers, local MP4/MOV/GIF files, web URL wallpap
 4. Press `Start Wallpaper` in the inspector.
 5. Press `Stop` to stop the live wallpaper.
 
+MotionDock is a menu bar app. It stays out of the Dock and Cmd+Tab. Use the menu bar icon to open the main window, restore the last wallpaper, open Settings, or choose `Quit MotionDock`.
+
 ## Main Layout
 
 MotionDock uses a three-column layout.
@@ -27,7 +29,6 @@ MotionDock uses a three-column layout.
 ### Sidebar
 
 - `Library`: all available wallpapers.
-- `Collections`: built-in motion collections.
 - `Favorites`: wallpapers marked as favorites.
 - `Recently Added`: imported wallpapers.
 - `Discover`: placeholder for curated wallpapers.
@@ -117,6 +118,11 @@ Marketplace uploads include the profile display name and profile ID.
 - `Pause When Covered`: pause when a large foreground window covers the display.
 - `Stop When Covered`: release wallpaper windows when covered.
 
+### System
+
+- `Start MotionDock when I log in`: registers MotionDock as a macOS Login Item.
+- When MotionDock starts from login, it stays hidden in the menu bar and restores the last wallpaper automatically if one was saved.
+
 ### Self-hosted Marketplace
 
 The marketplace server is an advanced local feature.
@@ -165,9 +171,9 @@ Downloaded files are stored at:
 - Confirm the file extension is `.gif`.
 - Check that Finder Preview or Safari can open the GIF.
 
-### Dock Click Does Not Restore the Window
+### Main Window Does Not Reopen
 
-MotionDock tracks its main control window separately from wallpaper render windows. If Dock restore ever fails after a rebuild, quit MotionDock and open `dist/MotionDock.app` again.
+MotionDock is hidden from the Dock by design. Use the menu bar icon and choose `Open MotionDock`. If reopen ever fails after a rebuild, choose `Quit MotionDock` from the menu bar and open `dist/MotionDock.app` again.
 
 ### Battery Use Is High
 

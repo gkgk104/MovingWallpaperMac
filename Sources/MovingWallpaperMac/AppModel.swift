@@ -1,11 +1,14 @@
 import AppKit
 import Combine
 import Foundation
+import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
+    static let shared = AppModel()
+
     @Published var libraryItems: [WallpaperLibraryItem] {
         didSet {
             saveLibrary()
@@ -107,6 +110,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var isSuspended = false
     @Published var errorMessage: String?
+    @Published private(set) var startAtLoginEnabled: Bool
+    @Published var loginItemMessage: String?
+    @Published private(set) var settingsRequestCounter = 0
 
     private let manager = WallpaperManager()
     private var playlistTimer: Timer?
@@ -138,6 +144,10 @@ final class AppModel: ObservableObject {
 
     var canRevealSelectedItem: Bool {
         selectedLocalFileURL != nil
+    }
+
+    var canRestoreLastWallpaper: Bool {
+        UserDefaults.standard.data(forKey: DefaultsKey.lastWallpaperRecord) != nil
     }
 
     var profileDisplayText: String {
@@ -183,6 +193,8 @@ final class AppModel: ObservableObject {
         profileIsLoggedIn = defaults.object(forKey: DefaultsKey.profileIsLoggedIn) as? Bool ?? false
         profileID = Self.loadProfileID(from: defaults)
         favoriteItemIDs = Set(defaults.stringArray(forKey: DefaultsKey.favoriteItemIDs) ?? [])
+        startAtLoginEnabled = defaults.object(forKey: DefaultsKey.startAtLoginEnabled) as? Bool
+            ?? (SMAppService.mainApp.status == .enabled || SMAppService.mainApp.status == .requiresApproval)
 
         NotificationCenter.default.publisher(for: NSNotification.Name.NSProcessInfoPowerStateDidChange)
             .sink { [weak self] _ in
@@ -402,6 +414,14 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func setStartAtLoginEnabled(_ enabled: Bool) {
+        schedule { $0.setStartAtLoginEnabledNow(enabled) }
+    }
+
+    func requestSettings() {
+        settingsRequestCounter += 1
+    }
+
     private func removeSelectedItemNow() {
         guard removableSelection, let selectedItem else {
             return
@@ -440,6 +460,7 @@ final class AppModel: ObservableObject {
             isRunning = true
             isSuspended = false
             errorMessage = nil
+            saveLastWallpaperRecord(for: configuration.item)
             configurePlaylistTimer()
             configurePerformanceTimer()
         } catch {
@@ -453,6 +474,10 @@ final class AppModel: ObservableObject {
         schedule { $0.stopNow() }
     }
 
+    func stopForQuit() {
+        stopNow()
+    }
+
     private func stopNow() {
         manager.stop()
         isRunning = false
@@ -461,6 +486,14 @@ final class AppModel: ObservableObject {
         playlistTimer = nil
         performanceTimer?.invalidate()
         performanceTimer = nil
+    }
+
+    func restoreLastWallpaper() {
+        schedule { $0.restoreLastWallpaperNow(reportMissingRecord: true) }
+    }
+
+    func restoreLastWallpaperOnLaunch() {
+        schedule { $0.restoreLastWallpaperNow(reportMissingRecord: false) }
     }
 
     private func scheduleRestartIfRunning() {
@@ -747,6 +780,89 @@ final class AppModel: ObservableObject {
 
         let url = URL(fileURLWithPath: path)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func setStartAtLoginEnabledNow(_ enabled: Bool) {
+        do {
+            if enabled {
+                if SMAppService.mainApp.status != .enabled {
+                    try SMAppService.mainApp.register()
+                }
+                startAtLoginEnabled = true
+                UserDefaults.standard.set(true, forKey: DefaultsKey.startAtLoginEnabled)
+                loginItemMessage = "MotionDock will start when you log in."
+            } else {
+                if SMAppService.mainApp.status != .notRegistered {
+                    try SMAppService.mainApp.unregister()
+                }
+                startAtLoginEnabled = false
+                UserDefaults.standard.set(false, forKey: DefaultsKey.startAtLoginEnabled)
+                loginItemMessage = "MotionDock will not start at login."
+            }
+        } catch {
+            startAtLoginEnabled = !enabled
+            UserDefaults.standard.set(startAtLoginEnabled, forKey: DefaultsKey.startAtLoginEnabled)
+            loginItemMessage = "Login item update failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveLastWallpaperRecord(for item: WallpaperLibraryItem) {
+        let record = LastWallpaperRecord(item: item)
+        guard let data = try? JSONEncoder().encode(record) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: DefaultsKey.lastWallpaperRecord)
+    }
+
+    @discardableResult
+    private func restoreLastWallpaperNow(reportMissingRecord: Bool) -> Bool {
+        guard
+            let data = UserDefaults.standard.data(forKey: DefaultsKey.lastWallpaperRecord),
+            let record = try? JSONDecoder().decode(LastWallpaperRecord.self, from: data)
+        else {
+            if reportMissingRecord {
+                errorMessage = "No previous wallpaper has been saved yet."
+            }
+            return false
+        }
+
+        guard let item = resolveLastWallpaperRecord(record) else {
+            return false
+        }
+
+        if !libraryItems.contains(where: { $0.id == item.id }) {
+            libraryItems.append(item)
+        }
+
+        setSelectedItem(item.id, restart: false)
+        startNow()
+        return isRunning
+    }
+
+    private func resolveLastWallpaperRecord(_ record: LastWallpaperRecord) -> WallpaperLibraryItem? {
+        let item = libraryItems.first { $0.id == record.id } ?? record.libraryItem
+
+        guard let item else {
+            errorMessage = "The last wallpaper could not be restored."
+            return nil
+        }
+
+        switch item.kind {
+        case .motion:
+            return item
+        case .video, .gif:
+            guard let path = item.videoPath, FileManager.default.fileExists(atPath: path) else {
+                errorMessage = "The last wallpaper file could not be found: \(item.videoPath ?? "missing path")"
+                return nil
+            }
+            return item
+        case .web:
+            guard let urlString = item.webURLString, let url = URL(string: urlString), Self.isSupportedWebURL(url) else {
+                errorMessage = "The last wallpaper URL is no longer valid."
+                return nil
+            }
+            return item
+        }
     }
 
     private func saveDownloadedMarketplaceFile(data: Data, item: MarketplaceItem) throws -> URL {
@@ -1055,6 +1171,49 @@ private extension Data {
     }
 }
 
+private struct LastWallpaperRecord: Codable {
+    let id: String
+    let name: String
+    let kindRawValue: String
+    let videoPath: String?
+    let webURLString: String?
+    let motionSceneRawValue: String
+    let motionPaletteRawValue: String
+    let isBuiltIn: Bool
+
+    init(item: WallpaperLibraryItem) {
+        id = item.id
+        name = item.name
+        kindRawValue = item.kind.rawValue
+        videoPath = item.videoPath
+        webURLString = item.webURLString
+        motionSceneRawValue = item.motionScene.rawValue
+        motionPaletteRawValue = item.motionPalette.rawValue
+        isBuiltIn = item.isBuiltIn
+    }
+
+    var libraryItem: WallpaperLibraryItem? {
+        guard
+            let kind = WallpaperItemKind(rawValue: kindRawValue),
+            let motionScene = MotionScene(rawValue: motionSceneRawValue),
+            let motionPalette = MotionPalette(rawValue: motionPaletteRawValue)
+        else {
+            return nil
+        }
+
+        return WallpaperLibraryItem(
+            id: id,
+            name: name,
+            kind: kind,
+            videoPath: videoPath,
+            webURLString: webURLString,
+            motionScene: motionScene,
+            motionPalette: motionPalette,
+            isBuiltIn: isBuiltIn
+        )
+    }
+}
+
 private enum DefaultsKey {
     static let libraryItems = "libraryItems"
     static let selectedItemID = "selectedItemID"
@@ -1071,4 +1230,6 @@ private enum DefaultsKey {
     static let favoriteItemIDs = "favoriteItemIDs"
     static let isMuted = "isMuted"
     static let fillMode = "fillMode"
+    static let startAtLoginEnabled = "startAtLoginEnabled"
+    static let lastWallpaperRecord = "lastWallpaperRecord"
 }

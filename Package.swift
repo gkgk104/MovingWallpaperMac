@@ -14,12 +14,16 @@ let package = Package(
         .executableTarget(
             name: "MovingWallpaperMac",
             path: "Sources/MovingWallpaperMac",
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("ImageIO"),
                 .linkedFramework("QuartzCore"),
+                .linkedFramework("ServiceManagement"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("WebKit")
             ]
