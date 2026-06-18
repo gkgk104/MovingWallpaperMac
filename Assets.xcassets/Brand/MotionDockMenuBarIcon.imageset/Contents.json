@@ -1,12 +1,12 @@
 {
   "images": [
     {
-      "filename": "motiondock-wordmark.png",
+      "filename": "motiondock-menu-bar-icon.png",
       "idiom": "universal",
       "scale": "1x"
     },
     {
-      "filename": "motiondock-wordmark@2x.png",
+      "filename": "motiondock-menu-bar-icon@2x.png",
       "idiom": "universal",
       "scale": "2x"
     }

@@ -2,12 +2,12 @@ import AppKit
 import SwiftUI
 
 enum MotionDockLayout {
-    static let sidebarWidth: CGFloat = 260
-    static let inspectorWidth: CGFloat = 380
+    static let sidebarWidth: CGFloat = 230
+    static let inspectorWidth: CGFloat = 340
     static let inspectorHorizontalPadding: CGFloat = 24
     static let inspectorVerticalPadding: CGFloat = 24
     static let inspectorContentWidth: CGFloat = inspectorWidth - inspectorHorizontalPadding * 2
-    static let inspectorInfoLabelWidth: CGFloat = 94
+    static let inspectorInfoLabelWidth: CGFloat = 86
     static let inspectorInfoColumnSpacing: CGFloat = 12
     static let inspectorInfoValueWidth: CGFloat = inspectorContentWidth - inspectorInfoLabelWidth - inspectorInfoColumnSpacing
     static let dividerWidth: CGFloat = 1
@@ -68,8 +68,10 @@ struct ContentView: View {
                 MotionDockSidebar(
                     selection: $selectedSection,
                     libraryCount: model.libraryItems.count,
+                    collectionCount: collectionItems.count,
                     favoriteCount: model.favoriteItemIDs.count,
-                    recentCount: recentlyAddedItems.count
+                    recentCount: recentlyAddedItems.count,
+                    isRunning: model.isRunning
                 )
                 .frame(width: sidebarWidth, height: proxy.size.height)
                 .clipped()
@@ -191,7 +193,7 @@ struct ContentView: View {
     @ViewBuilder
     private var mainContent: some View {
         switch selectedSection {
-        case .library, .favorites, .recentlyAdded:
+        case .library, .collections, .favorites, .recentlyAdded:
             wallpaperGridPage
                 .transition(.opacity)
         case .discover:
@@ -239,7 +241,7 @@ struct ContentView: View {
                 }
             } else {
                 ScrollView {
-                    LazyVGrid(columns: wallpaperColumns, alignment: .leading, spacing: 22) {
+                    LazyVGrid(columns: wallpaperColumns, alignment: .leading, spacing: 18) {
                         ForEach(filteredWallpapers) { item in
                             WallpaperCard(
                                 item: item,
@@ -259,12 +261,13 @@ struct ContentView: View {
                             )
                         }
                     }
+                    .padding(.trailing, 16)
                     .padding(.bottom, 28)
                 }
                 .scrollContentBackground(.hidden)
             }
         }
-        .padding(.horizontal, 30)
+        .padding(.horizontal, 26)
         .padding(.vertical, 26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
@@ -353,7 +356,7 @@ struct ContentView: View {
 
             Spacer()
         }
-        .padding(.horizontal, 30)
+        .padding(.horizontal, 26)
         .padding(.vertical, 26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
@@ -377,12 +380,11 @@ struct ContentView: View {
                         SectionHeader("Playback")
 
                         LabeledControl(title: "Display") {
-                            Picker("Display", selection: $displayMode) {
-                                ForEach(DisplayMode.allCases) { mode in
-                                    Text(mode.label).tag(mode)
-                                }
-                            }
-                            .pickerStyle(.segmented)
+                            MotionDockSegmentedPicker(
+                                options: DisplayMode.allCases,
+                                selection: $displayMode,
+                                title: { $0.label }
+                            )
                             .frame(maxWidth: 360)
                             .onChange(of: displayMode) { newValue in
                                 model.setDisplayMode(newValue)
@@ -398,12 +400,11 @@ struct ContentView: View {
                         }
 
                         LabeledControl(title: "Scale") {
-                            Picker("Scale", selection: $fillMode) {
-                                ForEach(VideoFillMode.allCases) { mode in
-                                    Text(mode.label).tag(mode)
-                                }
-                            }
-                            .pickerStyle(.segmented)
+                            MotionDockSegmentedPicker(
+                                options: VideoFillMode.allCases,
+                                selection: $fillMode,
+                                title: { $0.label }
+                            )
                             .frame(maxWidth: 220)
                             .onChange(of: fillMode) { newValue in
                                 model.setFillMode(newValue)
@@ -418,8 +419,7 @@ struct ContentView: View {
                                         model.setPlaylistEnabled(newValue)
                                     }
 
-                                Stepper(
-                                    "\(Int(playlistIntervalMinutes)) min",
+                                MotionDockIntervalStepper(
                                     value: $playlistIntervalMinutes,
                                     in: 1...120,
                                     step: 1
@@ -438,12 +438,11 @@ struct ContentView: View {
                         SectionHeader("Performance")
 
                         LabeledControl(title: "Profile") {
-                            Picker("Profile", selection: $performanceProfile) {
-                                ForEach(PerformanceProfile.allCases) { profile in
-                                    Text(profile.label).tag(profile)
-                                }
-                            }
-                            .pickerStyle(.segmented)
+                            MotionDockSegmentedPicker(
+                                options: PerformanceProfile.allCases,
+                                selection: $performanceProfile,
+                                title: { $0.label }
+                            )
                             .frame(maxWidth: 360)
                             .onChange(of: performanceProfile) { newValue in
                                 model.setPerformanceProfile(newValue)
@@ -451,11 +450,11 @@ struct ContentView: View {
                         }
 
                         LabeledControl(title: "Policy") {
-                            Picker("Policy", selection: $performancePolicy) {
-                                ForEach(PerformancePolicy.allCases) { policy in
-                                    Text(policy.label).tag(policy)
-                                }
-                            }
+                            MotionDockOptionMenu(
+                                options: PerformancePolicy.allCases,
+                                selection: $performancePolicy,
+                                title: { $0.label }
+                            )
                             .frame(maxWidth: 320)
                             .onChange(of: performancePolicy) { newValue in
                                 model.setPerformancePolicy(newValue)
@@ -468,7 +467,7 @@ struct ContentView: View {
 
                 marketplaceSettings
             }
-            .padding(.horizontal, 30)
+            .padding(.horizontal, 26)
             .padding(.vertical, 26)
         }
         .scrollContentBackground(.hidden)
@@ -610,32 +609,54 @@ struct ContentView: View {
             .layoutPriority(1)
 
             if showsImport {
-                VStack(alignment: .leading, spacing: 10) {
-                    searchField
-                        .frame(maxWidth: 300)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 14) {
+                        searchField
+                            .frame(maxWidth: 300)
 
-                    ImportWallpaperControl(
-                        onImportFiles: {
-                            model.addMediaFiles()
-                            selectedSection = .library
-                        },
-                        onImportURL: {
-                            isURLImportPresented = true
-                        }
-                    )
+                        Spacer(minLength: 12)
+
+                        importControl
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        searchField
+                            .frame(maxWidth: 300)
+
+                        importControl
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    private var importControl: some View {
+        ImportWallpaperControl(
+            onImportFiles: {
+                model.addMediaFiles()
+                selectedSection = .library
+            },
+            onImportURL: {
+                isURLImportPresented = true
+            }
+        )
     }
 
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(MotionDockTheme.secondaryText)
-            TextField("Search wallpapers", text: $searchText)
-                .textFieldStyle(.plain)
-                .foregroundStyle(Color.white.opacity(0.92))
+            ZStack(alignment: .leading) {
+                if searchText.isEmpty {
+                    Text("Search wallpapers")
+                        .foregroundStyle(MotionDockTheme.secondaryText.opacity(0.78))
+                        .lineLimit(1)
+                }
+
+                TextField("", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(Color.white.opacity(0.92))
+            }
         }
         .padding(.horizontal, 12)
         .frame(height: 38)
@@ -654,7 +675,7 @@ struct ContentView: View {
             emptyState(icon: icon, title: title, message: message)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal, 30)
+        .padding(.horizontal, 26)
         .padding(.vertical, 26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
@@ -668,7 +689,7 @@ struct ContentView: View {
 
     private var wallpaperColumns: [GridItem] {
         [
-            GridItem(.adaptive(minimum: 280, maximum: 360), spacing: 22)
+            GridItem(.adaptive(minimum: 190, maximum: 260), spacing: 18)
         ]
     }
 
@@ -676,10 +697,16 @@ struct ContentView: View {
         model.libraryItems.filter { !$0.isBuiltIn }
     }
 
+    private var collectionItems: [WallpaperLibraryItem] {
+        model.libraryItems.filter { $0.kind == .motion }
+    }
+
     private var sectionItems: [WallpaperLibraryItem] {
         switch selectedSection {
         case .library:
             return model.libraryItems
+        case .collections:
+            return collectionItems
         case .favorites:
             return model.libraryItems.filter { model.isFavorite($0) }
         case .recentlyAdded:
@@ -705,6 +732,7 @@ struct ContentView: View {
 
 private enum SidebarSection: String, CaseIterable, Identifiable {
     case library
+    case collections
     case favorites
     case recentlyAdded
     case discover
@@ -717,6 +745,8 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
         switch self {
         case .library:
             return "Library"
+        case .collections:
+            return "Collections"
         case .favorites:
             return "Favorites"
         case .recentlyAdded:
@@ -734,6 +764,8 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
         switch self {
         case .library:
             return "Live wallpapers, made native for macOS."
+        case .collections:
+            return "Built-in motion wallpaper collections."
         case .favorites:
             return "Your saved wallpapers."
         case .recentlyAdded:
@@ -749,6 +781,8 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
 
     var emptyTitle: String {
         switch self {
+        case .collections:
+            return "No collections"
         case .favorites:
             return "No favorites yet"
         case .recentlyAdded:
@@ -760,6 +794,8 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
 
     var emptyMessage: String {
         switch self {
+        case .collections:
+            return "Built-in MotionDock collections will appear here."
         case .favorites:
             return "Add wallpapers to Favorites from the inspector panel."
         case .recentlyAdded:
@@ -773,6 +809,8 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
         switch self {
         case .library:
             return "rectangle.stack"
+        case .collections:
+            return "square.grid.2x2"
         case .favorites:
             return "star"
         case .recentlyAdded:
@@ -790,34 +828,24 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
 private struct MotionDockSidebar: View {
     @Binding var selection: SidebarSection
     let libraryCount: Int
+    let collectionCount: Int
     let favoriteCount: Int
     let recentCount: Int
+    let isRunning: Bool
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             MotionDockTheme.secondarySurface
 
             VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        MotionDockLogoView(size: 42, cornerRadius: 13)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(MotionDockBrand.appName)
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(Color.white)
-                            Text(MotionDockBrand.tagline)
-                                .font(.caption)
-                                .foregroundStyle(MotionDockTheme.secondaryText)
-                                .lineLimit(2)
-                        }
-                    }
-
-                }
+                MotionDockWordmarkImage()
+                    .frame(width: 194, height: 52, alignment: .leading)
+                    .clipped()
                 .padding(.top, 24)
 
                 VStack(spacing: 8) {
                     sidebarButton(.library, count: libraryCount)
+                    sidebarButton(.collections, count: collectionCount)
                     sidebarButton(.favorites, count: favoriteCount)
                     sidebarButton(.recentlyAdded, count: recentCount)
                 }
@@ -834,9 +862,9 @@ private struct MotionDockSidebar: View {
 
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(MotionDockTheme.success)
+                        .fill(isRunning ? MotionDockTheme.success : MotionDockTheme.secondaryText.opacity(0.52))
                         .frame(width: 7, height: 7)
-                    Text("Ready")
+                    Text(isRunning ? "Running" : "Ready")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(MotionDockTheme.secondaryText)
                 }
@@ -884,9 +912,8 @@ private struct WallpaperCard: View {
     var body: some View {
         Button(action: onSelect) {
             MotionDockCard(isSelected: isSelected, isInteractive: isHovered) {
-                VStack(alignment: .leading, spacing: 14) {
-                    WallpaperPreview(item: item, thumbnail: thumbnailStore.thumbnail(for: item))
-                        .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                VStack(alignment: .leading, spacing: 12) {
+                    WallpaperCardPreview(item: item, thumbnail: thumbnailStore.thumbnail(for: item))
                         .overlay(alignment: .topLeading) {
                             HStack(spacing: 6) {
                                 MetadataBadge(WallpaperMetadata.fileType(for: item))
@@ -915,33 +942,63 @@ private struct WallpaperCard: View {
                                 .font(.headline.weight(.semibold))
                                 .foregroundStyle(Color.white.opacity(0.94))
                                 .lineLimit(1)
-
-                            Spacer()
+                                .truncationMode(.middle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
 
                             if isRunning {
                                 RunningIndicator()
+                                    .fixedSize()
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .clipped()
 
-                        Text(item.detail)
+                        Text(WallpaperMetadata.cardSubtitle(for: item))
                             .font(.caption)
                             .foregroundStyle(MotionDockTheme.secondaryText)
                             .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .clipped()
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .clipped()
                 }
                 .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
             }
-            .scaleEffect(isHovered ? 1.018 : 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
             .animation(MotionDockTheme.animation, value: isHovered)
             .animation(MotionDockTheme.animation, value: isSelected)
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .clipped()
         .onHover { hovering in
             isHovered = hovering
         }
         .onAppear {
             thumbnailStore.requestThumbnail(for: item)
         }
+    }
+}
+
+private struct WallpaperCardPreview: View {
+    let item: WallpaperLibraryItem
+    var thumbnail: NSImage?
+
+    var body: some View {
+        GeometryReader { proxy in
+            WallpaperPreview(item: item, thumbnail: thumbnail)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
+        }
+        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipped()
     }
 }
 
@@ -1029,13 +1086,14 @@ private struct InspectorPanel: View {
             .clipped()
 
             VStack(spacing: 12) {
-                DetailInfoRow(label: "Status", value: model.isRunning ? "Running" : "Stopped")
                 DetailInfoRow(label: "Resolution", value: WallpaperMetadata.resolution(for: item))
                 DetailInfoRow(label: "Duration", value: WallpaperMetadata.duration(for: item))
                 DetailInfoRow(label: "File Type", value: WallpaperMetadata.fileType(for: item))
+                DetailInfoRow(label: "File Size", value: WallpaperMetadata.fileSize(for: item))
+                DetailInfoRow(label: "Added", value: WallpaperMetadata.added(for: item))
                 DetailInfoRow(
-                    label: "File Name",
-                    value: WallpaperMetadata.fileName(for: item),
+                    label: "Path",
+                    value: WallpaperMetadata.path(for: item),
                     truncationMode: .middle
                 )
             }
@@ -1081,19 +1139,17 @@ private struct InspectorPanel: View {
     private var detailActions: some View {
         VStack(spacing: 10) {
             DetailActionButton(
-                title: "Start Wallpaper",
-                systemImage: "play.fill",
+                title: model.isRunning ? "Stop Wallpaper" : "Start Wallpaper",
+                systemImage: model.isRunning ? "stop.fill" : "play.fill",
                 style: .primary,
-                isDisabled: !model.canStart,
-                action: onStart
-            )
-
-            DetailActionButton(
-                title: "Stop",
-                systemImage: "stop.fill",
-                style: .secondary,
-                isDisabled: !model.isRunning,
-                action: onStop
+                isDisabled: !model.isRunning && !model.canStart,
+                action: {
+                    if model.isRunning {
+                        onStop()
+                    } else {
+                        onStart()
+                    }
+                }
             )
 
             DetailActionButton(
@@ -1135,7 +1191,25 @@ private struct WallpaperPreview: View {
             RoundedRectangle(cornerRadius: prominent ? MotionDockTheme.radius : 14, style: .continuous)
                 .fill(previewGradient)
 
-            if let thumbnail {
+            if item.kind == .motion {
+                ProceduralWallpaperView(
+                    scene: item.motionScene,
+                    palette: item.motionPalette,
+                    performanceProfile: prominent ? .quality : .balanced,
+                    isPaused: false
+                )
+                .allowsHitTesting(false)
+                .clipped()
+
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.02),
+                        Color.black.opacity(prominent ? 0.22 : 0.30)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            } else if let thumbnail {
                 Image(nsImage: thumbnail)
                     .resizable()
                     .scaledToFill()
@@ -1607,6 +1681,167 @@ private struct MarketplaceCompactRow: View {
     }
 }
 
+private struct MotionDockSegmentedPicker<Option: Identifiable & Equatable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let title: (Option) -> String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(options) { option in
+                let isSelected = selection == option
+
+                Button {
+                    selection = option
+                } label: {
+                    Text(title(option))
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(isSelected ? Color.white : MotionDockTheme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.82)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(isSelected ? MotionDockTheme.accent : Color.clear)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(isSelected ? Color.white.opacity(0.08) : Color.clear, lineWidth: 1)
+                }
+            }
+        }
+        .padding(4)
+        .frame(minHeight: 38)
+        .background(MotionDockTheme.secondarySurface.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(MotionDockTheme.border, lineWidth: 1)
+        }
+        .clipped()
+    }
+}
+
+private struct MotionDockOptionMenu<Option: Identifiable & Equatable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let title: (Option) -> String
+
+    var body: some View {
+        Menu {
+            ForEach(options) { option in
+                Button {
+                    selection = option
+                } label: {
+                    if selection == option {
+                        Label(title(option), systemImage: "checkmark")
+                    } else {
+                        Text(title(option))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(title(selection))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MotionDockTheme.secondaryText)
+                    .frame(width: 16)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 38)
+            .background(MotionDockTheme.secondarySurface.opacity(0.9))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(MotionDockTheme.border, lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .clipped()
+    }
+}
+
+private struct MotionDockIntervalStepper: View {
+    @Binding var value: Double
+    let bounds: ClosedRange<Double>
+    let step: Double
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(value: Binding<Double>, in bounds: ClosedRange<Double>, step: Double) {
+        _value = value
+        self.bounds = bounds
+        self.step = step
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            stepButton(systemImage: "minus", isDisabled: !canDecrement) {
+                updateValue(value - step)
+            }
+
+            Text("\(Int(value)) min")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(isEnabled ? 0.9 : 0.38))
+                .lineLimit(1)
+                .monospacedDigit()
+                .frame(minWidth: 58)
+
+            stepButton(systemImage: "plus", isDisabled: !canIncrement) {
+                updateValue(value + step)
+            }
+        }
+        .padding(.horizontal, 6)
+        .frame(height: 38)
+        .background(MotionDockTheme.secondarySurface.opacity(isEnabled ? 0.9 : 0.45))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(MotionDockTheme.border, lineWidth: 1)
+        }
+        .clipped()
+    }
+
+    private var canDecrement: Bool {
+        isEnabled && value > bounds.lowerBound
+    }
+
+    private var canIncrement: Bool {
+        isEnabled && value < bounds.upperBound
+    }
+
+    private func stepButton(systemImage: String, isDisabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(isDisabled ? MotionDockTheme.secondaryText.opacity(0.34) : Color.white.opacity(0.9))
+                .frame(width: 26, height: 26)
+                .background(Color.white.opacity(isDisabled ? 0.03 : 0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+    }
+
+    private func updateValue(_ newValue: Double) {
+        value = min(bounds.upperBound, max(bounds.lowerBound, newValue))
+    }
+}
+
 private struct MotionDockTextField: View {
     let placeholder: String
     @Binding var text: String
@@ -1617,17 +1852,26 @@ private struct MotionDockTextField: View {
     }
 
     var body: some View {
-        TextField(placeholder, text: $text)
-            .textFieldStyle(.plain)
-            .foregroundStyle(Color.white.opacity(0.92))
-            .padding(.horizontal, 12)
-            .frame(height: 38)
-            .background(MotionDockTheme.secondarySurface)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(MotionDockTheme.border, lineWidth: 1)
+        ZStack(alignment: .leading) {
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundStyle(MotionDockTheme.secondaryText.opacity(0.72))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
+
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .foregroundStyle(Color.white.opacity(0.92))
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(MotionDockTheme.secondarySurface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(MotionDockTheme.border, lineWidth: 1)
+        }
     }
 }
 
@@ -1684,6 +1928,17 @@ private struct MotionDockSecondaryButtonStyle: ButtonStyle {
 }
 
 private enum WallpaperMetadata {
+    static func cardSubtitle(for item: WallpaperLibraryItem) -> String {
+        switch item.kind {
+        case .motion:
+            return resolution(for: item)
+        case .video, .gif:
+            return fileName(for: item)
+        case .web:
+            return item.webURLString ?? "Web URL"
+        }
+    }
+
     static func fileType(for item: WallpaperLibraryItem) -> String {
         switch item.kind {
         case .motion:
@@ -1704,7 +1959,16 @@ private enum WallpaperMetadata {
         }
 
         switch item.kind {
-        case .motion, .web:
+        case .motion:
+            switch item.id {
+            case "motion-mountain":
+                return "5120 x 2880"
+            case "motion-nebula":
+                return "1920 x 1160"
+            default:
+                return "3840 x 2160"
+            }
+        case .web:
             return "Adaptive"
         case .video, .gif:
             return "Source"
@@ -1735,7 +1999,40 @@ private enum WallpaperMetadata {
         }
     }
 
-    private static func localURL(for item: WallpaperLibraryItem) -> URL? {
+    static func fileSize(for item: WallpaperLibraryItem) -> String {
+        switch item.kind {
+        case .motion:
+            return "Adaptive"
+        case .video, .gif:
+            guard
+                let url = localURL(for: item),
+                let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+                let fileSize = values.fileSize
+            else {
+                return "Source"
+            }
+            return ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
+        case .web:
+            return "Live"
+        }
+    }
+
+    static func added(for item: WallpaperLibraryItem) -> String {
+        item.isBuiltIn ? "Built-in" : "Imported"
+    }
+
+    static func path(for item: WallpaperLibraryItem) -> String {
+        switch item.kind {
+        case .motion:
+            return "Built-in renderer"
+        case .video, .gif:
+            return localURL(for: item)?.path ?? item.detail
+        case .web:
+            return item.webURLString ?? "Web URL"
+        }
+    }
+
+    static func localURL(for item: WallpaperLibraryItem) -> URL? {
         guard let path = item.videoPath, !path.isEmpty else {
             return nil
         }

@@ -46,6 +46,7 @@ fi
 /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.0" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$PLIST"
+/usr/libexec/PlistBuddy -c "Add :LSMultipleInstancesProhibited bool true" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 13.0" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST"
 

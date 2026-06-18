@@ -79,11 +79,24 @@ struct MovingWallpaperApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let openExistingInstanceNotification = Notification.Name("local.codex.motiondock.openExistingInstance")
+
     private var isQuittingFromMenu = false
+    private var isTerminatingDuplicateInstance = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if terminateIfDuplicateInstanceIsRunning() {
+            return
+        }
+
         NSApp.disableRelaunchOnLogin()
         NSApp.setActivationPolicy(.accessory)
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(openExistingInstance),
+            name: Self.openExistingInstanceNotification,
+            object: nil
+        )
 
         MainWindowRegistry.shared.startsHidden = LaunchContext.shouldStartHidden
         MotionDockStatusItemController.shared.configure(model: AppModel.shared)
@@ -103,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        isQuittingFromMenu ? .terminateNow : .terminateCancel
+        (isQuittingFromMenu || isTerminatingDuplicateInstance) ? .terminateNow : .terminateCancel
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -115,6 +128,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isQuittingFromMenu = true
         AppModel.shared.stopForQuit()
         NSApp.terminate(nil)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        DistributedNotificationCenter.default().removeObserver(self)
+    }
+
+    private func terminateIfDuplicateInstanceIsRunning() -> Bool {
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "local.codex.motiondock"
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let existingInstance = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .first { application in
+                application.processIdentifier != currentPID && !application.isTerminated
+            }
+
+        guard let existingInstance else {
+            return false
+        }
+
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.openExistingInstanceNotification,
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
+        existingInstance.activate(options: [.activateIgnoringOtherApps])
+        isTerminatingDuplicateInstance = true
+        NSApp.terminate(nil)
+        return true
+    }
+
+    @objc private func openExistingInstance() {
+        MainWindowRegistry.shared.restoreMainWindow(in: NSApplication.shared)
     }
 }
 

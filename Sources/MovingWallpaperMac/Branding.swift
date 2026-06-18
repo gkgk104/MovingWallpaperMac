@@ -9,6 +9,7 @@ enum MotionDockBrand {
     static let appIconAssetName = "MotionDockAppIcon"
     static let logoSubdirectory = "Assets.xcassets/Brand/MotionDockLogo.imageset"
     static let wordmarkSubdirectory = "Assets.xcassets/Brand/MotionDockWordmark.imageset"
+    static let menuBarIconSubdirectory = "Assets.xcassets/Brand/MotionDockMenuBarIcon.imageset"
     static let appIconSubdirectory = "Assets.xcassets/AppIcon.appiconset"
 
     static let background = Color(red: 16.0 / 255.0, green: 17.0 / 255.0, blue: 19.0 / 255.0)
@@ -28,14 +29,15 @@ enum MotionDockBrand {
     }
 
     static func wordmarkImage() -> NSImage? {
-        imageResource(
-            named: "motiondock-wordmark-placeholder@2x",
-            subdirectory: wordmarkSubdirectory
-        )
+        NSImage(named: wordmarkAssetName)
+            ?? imageResource(named: "motiondock-wordmark", subdirectory: wordmarkSubdirectory)
+            ?? imageResource(named: "motiondock-wordmark@2x", subdirectory: wordmarkSubdirectory)
     }
 
     static func statusBarIcon() -> NSImage? {
-        let source = NSImage(named: appIconAssetName)
+        let source = imageResource(named: "motiondock-menu-bar-icon", subdirectory: menuBarIconSubdirectory)
+            ?? imageResource(named: "motiondock-menu-bar-icon@2x", subdirectory: menuBarIconSubdirectory)
+            ?? NSImage(named: appIconAssetName)
             ?? imageResource(named: "motiondock-app-icon", subdirectory: "Assets.xcassets/MotionDockAppIcon.imageset")
             ?? imageResource(named: "icon_32x32@2x", subdirectory: appIconSubdirectory)
             ?? NSImage(named: NSImage.applicationIconName)
@@ -46,7 +48,7 @@ enum MotionDockBrand {
 
         let image = source.copy() as? NSImage ?? source
         image.size = NSSize(width: 18, height: 18)
-        image.isTemplate = false
+        image.isTemplate = true
         image.accessibilityDescription = appName
         return image
     }

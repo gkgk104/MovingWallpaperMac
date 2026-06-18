@@ -39,6 +39,10 @@ enum WallpaperItemKind: String, Codable, CaseIterable, Identifiable {
 enum MotionScene: String, Codable, CaseIterable, Identifiable {
     case aurora
     case orbit
+    case nebula
+    case ocean
+    case mountain
+    case city
     case mesh
 
     var id: String { rawValue }
@@ -49,6 +53,14 @@ enum MotionScene: String, Codable, CaseIterable, Identifiable {
             "Aurora Ribbons"
         case .orbit:
             "Orbit Flow"
+        case .nebula:
+            "Nebula Drift"
+        case .ocean:
+            "Ocean Depths"
+        case .mountain:
+            "Mountain Mist"
+        case .city:
+            "Cyber City"
         case .mesh:
             "Signal Mesh"
         }
@@ -225,6 +237,46 @@ struct WallpaperLibraryItem: Codable, Equatable, Identifiable {
             videoPath: nil,
             webURLString: nil,
             motionScene: .orbit,
+            motionPalette: .prism,
+            isBuiltIn: true
+        ),
+        WallpaperLibraryItem(
+            id: "motion-nebula",
+            name: "Nebula Drift",
+            kind: .motion,
+            videoPath: nil,
+            webURLString: nil,
+            motionScene: .nebula,
+            motionPalette: .prism,
+            isBuiltIn: true
+        ),
+        WallpaperLibraryItem(
+            id: "motion-ocean",
+            name: "Ocean Depths",
+            kind: .motion,
+            videoPath: nil,
+            webURLString: nil,
+            motionScene: .ocean,
+            motionPalette: .aurora,
+            isBuiltIn: true
+        ),
+        WallpaperLibraryItem(
+            id: "motion-mountain",
+            name: "Mountain Mist",
+            kind: .motion,
+            videoPath: nil,
+            webURLString: nil,
+            motionScene: .mountain,
+            motionPalette: .graphite,
+            isBuiltIn: true
+        ),
+        WallpaperLibraryItem(
+            id: "motion-city",
+            name: "Cyber City",
+            kind: .motion,
+            videoPath: nil,
+            webURLString: nil,
+            motionScene: .city,
             motionPalette: .prism,
             isBuiltIn: true
         ),

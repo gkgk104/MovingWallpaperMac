@@ -59,6 +59,14 @@ struct ProceduralWallpaperView: View {
                     drawRibbons(in: &context, size: size, date: timeline.date)
                 case .orbit:
                     drawOrbits(in: &context, size: size, date: timeline.date)
+                case .nebula:
+                    drawNebula(in: &context, size: size, date: timeline.date)
+                case .ocean:
+                    drawOcean(in: &context, size: size, date: timeline.date)
+                case .mountain:
+                    drawMountainMist(in: &context, size: size, date: timeline.date)
+                case .city:
+                    drawCyberCity(in: &context, size: size, date: timeline.date)
                 case .mesh:
                     drawMesh(in: &context, size: size, date: timeline.date)
                 }
@@ -162,6 +170,228 @@ struct ProceduralWallpaperView: View {
         }
     }
 
+    private func drawNebula(in context: inout GraphicsContext, size: CGSize, date: Date) {
+        let time = date.timeIntervalSinceReferenceDate * performanceProfile.motionSpeedScale
+        let width = max(size.width, 1)
+        let height = max(size.height, 1)
+        let colors = accentColors
+        let starCount = performanceProfile == .batterySaver ? 44 : 86
+
+        for index in 0..<starCount {
+            let seed = Double(index + 1)
+            let x = width * unitNoise(seed * 17.2)
+            let y = height * unitNoise(seed * 31.7)
+            let pulse = 0.42 + 0.34 * sin(time * 0.55 + seed)
+            let radius = CGFloat(0.7 + unitNoise(seed * 5.1) * 1.9)
+            context.fill(
+                Path(ellipseIn: CGRect(x: x, y: y, width: radius, height: radius)),
+                with: .color(Color.white.opacity(0.20 + pulse * 0.24))
+            )
+        }
+
+        for index in 0..<6 {
+            var path = Path()
+            let baseY = height * (0.22 + CGFloat(index) * 0.095)
+            let drift = CGFloat(sin(time * (0.18 + Double(index) * 0.04))) * width * 0.05
+
+            path.move(to: CGPoint(x: -width * 0.10 + drift, y: baseY))
+            path.addCurve(
+                to: CGPoint(x: width * 1.10 + drift * 0.3, y: height * (0.76 - CGFloat(index) * 0.045)),
+                control1: CGPoint(x: width * 0.20, y: baseY - height * (0.18 + CGFloat(index) * 0.012)),
+                control2: CGPoint(x: width * 0.68, y: height * (0.52 + CGFloat(index) * 0.032))
+            )
+
+            context.stroke(
+                path,
+                with: .linearGradient(
+                    Gradient(colors: [
+                        .clear,
+                        colors[index % colors.count].opacity(0.18),
+                        MotionDockTheme.cyan.opacity(0.32),
+                        colors[(index + 1) % colors.count].opacity(0.16),
+                        .clear
+                    ]),
+                    startPoint: CGPoint(x: 0, y: baseY),
+                    endPoint: CGPoint(x: width, y: baseY)
+                ),
+                style: StrokeStyle(lineWidth: 42 - CGFloat(index) * 4.5, lineCap: .round, lineJoin: .round)
+            )
+        }
+    }
+
+    private func drawOcean(in context: inout GraphicsContext, size: CGSize, date: Date) {
+        let time = date.timeIntervalSinceReferenceDate * performanceProfile.motionSpeedScale
+        let width = max(size.width, 1)
+        let height = max(size.height, 1)
+        let colors = accentColors
+        let horizonY = height * 0.52
+
+        let glowRect = CGRect(x: -width * 0.08, y: horizonY - height * 0.24, width: width * 1.16, height: height * 0.36)
+        context.fill(
+            Path(ellipseIn: glowRect),
+            with: .radialGradient(
+                Gradient(colors: [
+                    MotionDockTheme.cyan.opacity(0.26),
+                    colors.first?.opacity(0.18) ?? MotionDockTheme.accent.opacity(0.18),
+                    .clear
+                ]),
+                center: CGPoint(x: width * 0.5, y: horizonY),
+                startRadius: 0,
+                endRadius: width * 0.58
+            )
+        )
+
+        for index in 0..<7 {
+            var path = Path()
+            let baseY = horizonY + height * (0.05 + CGFloat(index) * 0.055)
+            let amplitude = height * (0.008 + CGFloat(index) * 0.003)
+            path.move(to: CGPoint(x: -8, y: baseY))
+
+            for step in 0...50 {
+                let xProgress = CGFloat(step) / 50
+                let x = xProgress * (width + 16) - 8
+                let phase = Double(xProgress) * Double.pi * (2.0 + Double(index) * 0.26) + time * (0.22 + Double(index) * 0.05)
+                let y = baseY + CGFloat(sin(phase)) * amplitude
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+
+            context.stroke(
+                path,
+                with: .linearGradient(
+                    Gradient(colors: [
+                        .clear,
+                        colors[index % colors.count].opacity(0.26),
+                        MotionDockTheme.cyan.opacity(0.38),
+                        .clear
+                    ]),
+                    startPoint: CGPoint(x: 0, y: baseY),
+                    endPoint: CGPoint(x: width, y: baseY)
+                ),
+                lineWidth: 1.4 + CGFloat(index) * 0.5
+            )
+        }
+    }
+
+    private func drawMountainMist(in context: inout GraphicsContext, size: CGSize, date: Date) {
+        let time = date.timeIntervalSinceReferenceDate * performanceProfile.motionSpeedScale
+        let width = max(size.width, 1)
+        let height = max(size.height, 1)
+        let colors = accentColors
+
+        for layer in 0..<3 {
+            var mountain = Path()
+            let baseY = height * (0.62 + CGFloat(layer) * 0.09)
+            mountain.move(to: CGPoint(x: 0, y: height))
+            mountain.addLine(to: CGPoint(x: 0, y: baseY))
+
+            for point in 0...7 {
+                let progress = CGFloat(point) / 7
+                let x = width * progress
+                let peak = sin(Double(point) * 1.7 + Double(layer)) * 0.5 + 0.5
+                let y = baseY - height * CGFloat(0.14 + peak * (0.16 - Double(layer) * 0.025))
+                mountain.addLine(to: CGPoint(x: x, y: y))
+            }
+
+            mountain.addLine(to: CGPoint(x: width, y: height))
+            mountain.closeSubpath()
+            context.fill(
+                mountain,
+                with: .color(Color.black.opacity(0.25 + Double(layer) * 0.18))
+            )
+        }
+
+        for index in 0..<7 {
+            var mist = Path()
+            let baseY = height * (0.34 + CGFloat(index) * 0.07)
+            let offset = CGFloat(sin(time * (0.14 + Double(index) * 0.025))) * width * 0.06
+            mist.move(to: CGPoint(x: -width * 0.08 + offset, y: baseY))
+            mist.addCurve(
+                to: CGPoint(x: width * 1.08 + offset * 0.4, y: baseY + height * 0.04),
+                control1: CGPoint(x: width * 0.22, y: baseY - height * 0.08),
+                control2: CGPoint(x: width * 0.72, y: baseY + height * 0.09)
+            )
+            context.stroke(
+                mist,
+                with: .linearGradient(
+                    Gradient(colors: [
+                        .clear,
+                        colors[index % colors.count].opacity(0.16),
+                        Color.white.opacity(0.12),
+                        .clear
+                    ]),
+                    startPoint: CGPoint(x: 0, y: baseY),
+                    endPoint: CGPoint(x: width, y: baseY)
+                ),
+                style: StrokeStyle(lineWidth: 18 - CGFloat(index) * 1.5, lineCap: .round)
+            )
+        }
+    }
+
+    private func drawCyberCity(in context: inout GraphicsContext, size: CGSize, date: Date) {
+        let time = date.timeIntervalSinceReferenceDate * performanceProfile.motionSpeedScale
+        let width = max(size.width, 1)
+        let height = max(size.height, 1)
+        let colors = accentColors
+        let skylineBase = height * 0.70
+        let buildingCount = performanceProfile == .batterySaver ? 12 : 18
+
+        for index in 0..<buildingCount {
+            let progress = CGFloat(index) / CGFloat(max(buildingCount - 1, 1))
+            let buildingWidth = width / CGFloat(buildingCount) * 0.72
+            let x = width * progress
+            let buildingHeight = height * (0.16 + unitNoise(Double(index) * 9.7) * 0.28)
+            let rect = CGRect(x: x, y: skylineBase - buildingHeight, width: buildingWidth, height: buildingHeight)
+            context.fill(Path(rect), with: .color(Color.black.opacity(0.54)))
+
+            let accent = colors[index % colors.count]
+            context.stroke(
+                Path(rect),
+                with: .color(accent.opacity(0.18 + 0.10 * sin(time * 0.7 + Double(index)))),
+                lineWidth: 1.2
+            )
+
+            for window in 0..<4 {
+                let windowY = rect.minY + CGFloat(window + 1) * rect.height / 5
+                let windowRect = CGRect(
+                    x: rect.minX + rect.width * 0.18,
+                    y: windowY,
+                    width: rect.width * 0.58,
+                    height: 1.4
+                )
+                context.fill(
+                    Path(windowRect),
+                    with: .color(accent.opacity(0.24 + 0.18 * unitNoise(Double(index * 11 + window))))
+                )
+            }
+        }
+
+        for index in 0..<6 {
+            var reflection = Path()
+            let baseY = skylineBase + height * (0.04 + CGFloat(index) * 0.037)
+            reflection.move(to: CGPoint(x: -10, y: baseY))
+            for step in 0...44 {
+                let xProgress = CGFloat(step) / 44
+                let x = xProgress * (width + 20) - 10
+                let y = baseY + CGFloat(sin(Double(xProgress) * Double.pi * 4 + time * 0.34 + Double(index))) * height * 0.008
+                reflection.addLine(to: CGPoint(x: x, y: y))
+            }
+            context.stroke(
+                reflection,
+                with: .linearGradient(
+                    Gradient(colors: [
+                        .clear,
+                        MotionDockTheme.accent.opacity(0.18),
+                        MotionDockTheme.cyan.opacity(0.36),
+                        .clear
+                    ]),
+                    startPoint: CGPoint(x: 0, y: baseY),
+                    endPoint: CGPoint(x: width, y: baseY)
+                ),
+                lineWidth: 1.5 + CGFloat(index) * 0.25
+            )
+        }
+    }
+
     private func drawMesh(in context: inout GraphicsContext, size: CGSize, date: Date) {
         let time = date.timeIntervalSinceReferenceDate * performanceProfile.motionSpeedScale
         let width = max(size.width, 1)
@@ -203,6 +433,11 @@ struct ProceduralWallpaperView: View {
             }
             context.stroke(path, with: .color(colors[column % colors.count].opacity(0.16)), lineWidth: 1.0)
         }
+    }
+
+    private func unitNoise(_ seed: Double) -> CGFloat {
+        let value = sin(seed * 12.9898) * 43758.5453
+        return CGFloat(value - floor(value))
     }
 
     private var backgroundColors: [Color] {

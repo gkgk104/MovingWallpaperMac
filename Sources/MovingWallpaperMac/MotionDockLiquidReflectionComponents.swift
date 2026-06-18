@@ -128,7 +128,10 @@ struct MotionDockCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: MotionDockTheme.cornerRadius, style: .continuous)
+
         content
+            .frame(minWidth: 0, maxWidth: .infinity)
             .background(
                 LinearGradient(
                     colors: [
@@ -140,22 +143,31 @@ struct MotionDockCard<Content: View>: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .clipShape(RoundedRectangle(cornerRadius: MotionDockTheme.cornerRadius, style: .continuous))
+            .clipShape(shape)
             .overlay {
-                RoundedRectangle(cornerRadius: MotionDockTheme.cornerRadius, style: .continuous)
-                    .stroke(isSelected ? MotionDockTheme.accent : MotionDockTheme.border, lineWidth: isSelected ? 1.8 : 1)
+                shape
+                    .stroke(
+                        isSelected ? MotionDockTheme.accent : MotionDockTheme.border,
+                        lineWidth: isSelected ? 1.8 : 1
+                    )
             }
             .overlay(alignment: .bottom) {
-                if isSelected {
-                    LiquidReflectionView(lineCount: 5, amplitude: 4, intensity: 0.9, animated: true)
-                        .frame(height: 26)
-                        .padding(.horizontal, 18)
-                        .offset(y: 7)
-                        .allowsHitTesting(false)
-                }
+                LiquidReflectionView(
+                    lineCount: isSelected ? 5 : 4,
+                    amplitude: isSelected ? 4 : 2.4,
+                    intensity: isSelected ? 0.9 : 0.28,
+                    animated: true
+                )
+                .frame(height: isSelected ? 26 : 18)
+                .padding(.horizontal, isSelected ? 18 : 28)
+                .padding(.bottom, isSelected ? 3 : 4)
+                .opacity(isSelected ? 1 : 0.52)
+                .allowsHitTesting(false)
             }
+            .clipShape(shape)
             .shadow(color: MotionDockTheme.accent.opacity(isSelected ? 0.16 : 0), radius: 18, y: 8)
             .shadow(color: Color.black.opacity(isInteractive ? 0.34 : 0.18), radius: isInteractive ? 18 : 8, y: isInteractive ? 10 : 4)
+            .clipped()
     }
 }
 
@@ -209,6 +221,8 @@ struct MotionDockSidebarItem: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
@@ -234,10 +248,27 @@ struct MotionDockSidebarItem: View {
             }
             .foregroundStyle(isSelected ? Color.white : MotionDockTheme.secondaryText)
             .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 38)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MotionDockSidebarRowButtonStyle(isSelected: isSelected, isHovered: isHovered))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .clipped()
+    }
+}
+
+private struct MotionDockSidebarRowButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    let isHovered: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
             .background {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.10) : Color.clear)
+                    .fill(rowBackground(isPressed: configuration.isPressed))
             }
             .overlay(alignment: .leading) {
                 if isSelected {
@@ -256,9 +287,28 @@ struct MotionDockSidebarItem: View {
                         .allowsHitTesting(false)
                 }
             }
+            .contentShape(Rectangle())
+            .scaleEffect(configuration.isPressed ? 0.992 : 1)
+            .animation(MotionDockTheme.animation, value: configuration.isPressed)
+            .animation(MotionDockTheme.animation, value: isHovered)
+            .animation(MotionDockTheme.animation, value: isSelected)
             .clipped()
+    }
+
+    private func rowBackground(isPressed: Bool) -> Color {
+        if isPressed {
+            return Color.white.opacity(0.14)
         }
-        .buttonStyle(.plain)
+
+        if isSelected {
+            return Color.white.opacity(0.10)
+        }
+
+        if isHovered {
+            return Color.white.opacity(0.06)
+        }
+
+        return Color.clear
     }
 }
 
