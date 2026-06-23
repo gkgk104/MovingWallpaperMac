@@ -11,6 +11,10 @@ DerivedData/
 # Local marketplace uploads and logs
 marketplace-server/data/
 
+# Local Supabase credentials
+Supabase.plist
+Sources/MovingWallpaperMac/Resources/Supabase.plist
+
 # Editor state
 .vscode/
 .idea/

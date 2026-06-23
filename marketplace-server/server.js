@@ -11,7 +11,20 @@ const filesDir = path.join(dataDir, "files");
 const dbPath = path.join(dataDir, "wallpapers.json");
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "127.0.0.1";
-const maxUploadBytes = Number(process.env.MAX_UPLOAD_MB || 250) * 1024 * 1024;
+const maxUploadMegabytes = Number(process.env.MAX_UPLOAD_MB || 250);
+const maxUploadBytes = maxUploadMegabytes * 1024 * 1024;
+const maxUserStorageMegabytes = Number(process.env.MAX_USER_STORAGE_MB || 1024);
+const maxUserStorageBytes = maxUserStorageMegabytes * 1024 * 1024;
+const moderationMode = process.env.MODERATION_MODE === "manual" ? "manual" : "auto";
+const moderationAdminToken = process.env.MODERATION_ADMIN_TOKEN || "";
+const defaultModerationStatus = moderationMode === "manual" ? "pending" : "approved";
+const moderationStatuses = new Set(["pending", "approved", "rejected"]);
+const supportedVideoExtensions = new Set([".mp4", ".m4v", ".mov"]);
+const supportedGIFExtensions = new Set([".gif"]);
+const supportedUploadExtensions = new Set([
+  ...supportedVideoExtensions,
+  ...supportedGIFExtensions
+]);
 
 fs.mkdirSync(filesDir, { recursive: true });
 if (!fs.existsSync(dbPath)) {
@@ -22,9 +35,7 @@ const mimeTypes = {
   ".gif": "image/gif",
   ".mp4": "video/mp4",
   ".m4v": "video/x-m4v",
-  ".mov": "video/quicktime",
-  ".webm": "video/webm",
-  ".avi": "video/x-msvideo"
+  ".mov": "video/quicktime"
 };
 
 function readDB() {
@@ -66,12 +77,53 @@ function cleanText(value, fallback, maxLength = 80) {
 
 function inferKind(filename, explicitKind) {
   const ext = path.extname(filename).toLowerCase();
-  if (explicitKind === "gif" || ext === ".gif") return "gif";
-  if (explicitKind === "video" || [".mp4", ".m4v", ".mov", ".webm", ".avi"].includes(ext)) return "video";
+  if (supportedGIFExtensions.has(ext)) {
+    return !explicitKind || explicitKind === "gif" ? "gif" : null;
+  }
+  if (supportedVideoExtensions.has(ext)) {
+    return !explicitKind || explicitKind === "video" ? "video" : null;
+  }
   return null;
 }
 
+function normalizedUploaderID(value) {
+  return cleanText(value, "anonymous", 120);
+}
+
+function storageUsedByUploader(items, uploaderID) {
+  const key = normalizedUploaderID(uploaderID);
+  return items.reduce((total, item) => {
+    const itemUploaderID = normalizedUploaderID(item.uploader_id || item.uploaderID);
+    if (itemUploaderID !== key) {
+      return total;
+    }
+    return total + Number(item.size || 0);
+  }, 0);
+}
+
+function moderationStatus(value) {
+  const status = String(value || "").toLowerCase();
+  return moderationStatuses.has(status) ? status : "approved";
+}
+
+function isAdminRequest(request, url) {
+  if (!moderationAdminToken) {
+    return false;
+  }
+  const header = request.headers.authorization || "";
+  return header === `Bearer ${moderationAdminToken}`
+    || url.searchParams.get("adminToken") === moderationAdminToken;
+}
+
+function visibleItems(items, request, url) {
+  if (isAdminRequest(request, url) && url.searchParams.get("include") === "all") {
+    return items;
+  }
+  return items.filter((item) => moderationStatus(item.moderationStatus) === "approved");
+}
+
 function publicItem(item) {
+  const uploaderID = item.uploader_id || item.uploaderID || "";
   return {
     id: item.id,
     title: item.title,
@@ -81,7 +133,14 @@ function publicItem(item) {
     createdAt: item.createdAt,
     downloadURL: `/files/${encodeURIComponent(item.storedName)}`,
     uploaderName: item.uploaderName || "Unknown",
-    uploaderID: item.uploaderID || ""
+    uploader_id: uploaderID,
+    uploaderID,
+    moderation_status: moderationStatus(item.moderationStatus),
+    moderationStatus: moderationStatus(item.moderationStatus),
+    reviewed_at: item.reviewedAt || null,
+    reviewedAt: item.reviewedAt || null,
+    rejection_reason: item.rejectionReason || null,
+    rejectionReason: item.rejectionReason || null
   };
 }
 
@@ -94,7 +153,7 @@ function collectBody(request) {
       total += chunk.length;
       if (total > maxUploadBytes) {
         request.destroy();
-        reject(new Error(`Upload exceeds ${Math.floor(maxUploadBytes / 1024 / 1024)} MB`));
+        reject(new Error(`Upload exceeds ${maxUploadMegabytes} MB`));
         return;
       }
       chunks.push(chunk);
@@ -190,9 +249,27 @@ async function handleUpload(request, response) {
   }
 
   const originalName = safeName(filePart.filename);
+  const originalExtension = path.extname(originalName).toLowerCase();
+  if (!supportedUploadExtensions.has(originalExtension)) {
+    sendError(response, 400, "Only MP4, MOV, M4V, and GIF files are supported");
+    return;
+  }
+  if (filePart.content.length > maxUploadBytes) {
+    sendError(response, 413, `Upload exceeds ${maxUploadMegabytes} MB`);
+    return;
+  }
+
   const kind = inferKind(originalName, fields.get("kind"));
   if (!kind) {
-    sendError(response, 400, "Only GIF and common video files are supported");
+    sendError(response, 400, "The uploaded file extension does not match the requested kind");
+    return;
+  }
+
+  const uploaderID = normalizedUploaderID(fields.get("uploader_id") || fields.get("uploaderID"));
+  const items = readDB();
+  const currentUserStorageBytes = storageUsedByUploader(items, uploaderID);
+  if (currentUserStorageBytes + filePart.content.length > maxUserStorageBytes) {
+    sendError(response, 413, `User storage quota exceeds ${maxUserStorageMegabytes} MB`);
     return;
   }
 
@@ -210,13 +287,55 @@ async function handleUpload(request, response) {
     size: filePart.content.length,
     createdAt: new Date().toISOString(),
     uploaderName: cleanText(fields.get("uploaderName"), "Unknown"),
-    uploaderID: cleanText(fields.get("uploaderID"), "", 120)
+    uploader_id: uploaderID,
+    moderationStatus: defaultModerationStatus,
+    reviewedAt: defaultModerationStatus === "approved" ? new Date().toISOString() : null,
+    rejectionReason: null
   };
 
-  const items = readDB();
   items.unshift(item);
   writeDB(items);
   sendJSON(response, 201, publicItem(item));
+}
+
+async function handleModerationUpdate(request, response, url, id) {
+  if (!isAdminRequest(request, url)) {
+    sendError(response, 403, "Moderation admin token is required");
+    return;
+  }
+
+  let body;
+  try {
+    body = await collectBody(request);
+  } catch (error) {
+    sendError(response, 400, error.message);
+    return;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(body.toString("utf8") || "{}");
+  } catch {
+    sendError(response, 400, "Expected JSON body");
+    return;
+  }
+
+  const nextStatus = moderationStatus(payload.moderationStatus || payload.moderation_status);
+  const items = readDB();
+  const item = items.find((candidate) => candidate.id === id);
+  if (!item) {
+    sendError(response, 404, "Wallpaper not found");
+    return;
+  }
+
+  item.moderationStatus = nextStatus;
+  item.reviewedAt = new Date().toISOString();
+  item.rejectionReason = nextStatus === "rejected"
+    ? cleanText(payload.rejectionReason || payload.rejection_reason, "Rejected", 240)
+    : null;
+
+  writeDB(items);
+  sendJSON(response, 200, publicItem(item));
 }
 
 function handleDownload(request, response, pathname) {
@@ -245,20 +364,26 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "OPTIONS") {
     response.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
+      "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
     });
     response.end();
     return;
   }
 
   if (request.method === "GET" && url.pathname === "/api/wallpapers") {
-    sendJSON(response, 200, readDB().map(publicItem));
+    sendJSON(response, 200, visibleItems(readDB(), request, url).map(publicItem));
     return;
   }
 
   if (request.method === "POST" && url.pathname === "/api/wallpapers") {
     await handleUpload(request, response);
+    return;
+  }
+
+  const moderationMatch = /^\/api\/wallpapers\/([^/]+)\/moderation$/.exec(url.pathname);
+  if (request.method === "PATCH" && moderationMatch) {
+    await handleModerationUpdate(request, response, url, decodeURIComponent(moderationMatch[1]));
     return;
   }
 
@@ -270,7 +395,8 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "GET" && url.pathname === "/") {
     sendJSON(response, 200, {
       name: "MotionDock Marketplace",
-      endpoints: ["/api/wallpapers", "/files/:storedName"]
+      endpoints: ["/api/wallpapers", "/api/wallpapers/:id/moderation", "/files/:storedName"],
+      moderationMode
     });
     return;
   }

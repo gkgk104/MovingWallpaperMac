@@ -6,7 +6,6 @@ enum MotionDockBrand {
     static let tagline = "Live wallpapers, made native for macOS."
     static let logoAssetName = "MotionDockLogo"
     static let wordmarkAssetName = "MotionDockWordmark"
-    static let appIconAssetName = "MotionDockAppIcon"
     static let logoSubdirectory = "Assets.xcassets/Brand/MotionDockLogo.imageset"
     static let wordmarkSubdirectory = "Assets.xcassets/Brand/MotionDockWordmark.imageset"
     static let menuBarIconSubdirectory = "Assets.xcassets/Brand/MotionDockMenuBarIcon.imageset"
@@ -25,7 +24,6 @@ enum MotionDockBrand {
         }
 
         return imageResource(named: "motiondock-logo", subdirectory: logoSubdirectory)
-            ?? imageResource(named: "motiondock-logo-mark-placeholder@2x", subdirectory: logoSubdirectory)
     }
 
     static func wordmarkImage() -> NSImage? {
@@ -37,8 +35,6 @@ enum MotionDockBrand {
     static func statusBarIcon() -> NSImage? {
         let source = imageResource(named: "motiondock-menu-bar-icon", subdirectory: menuBarIconSubdirectory)
             ?? imageResource(named: "motiondock-menu-bar-icon@2x", subdirectory: menuBarIconSubdirectory)
-            ?? NSImage(named: appIconAssetName)
-            ?? imageResource(named: "motiondock-app-icon", subdirectory: "Assets.xcassets/MotionDockAppIcon.imageset")
             ?? imageResource(named: "icon_32x32@2x", subdirectory: appIconSubdirectory)
             ?? NSImage(named: NSImage.applicationIconName)
 

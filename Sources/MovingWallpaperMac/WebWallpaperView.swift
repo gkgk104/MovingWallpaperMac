@@ -3,6 +3,7 @@ import WebKit
 
 final class WebWallpaperView: NSView, WallpaperPlaybackControlling {
     private let webView: WKWebView
+    private var isPaused = false
 
     init(url: URL) {
         let configuration = WKWebViewConfiguration()
@@ -33,6 +34,7 @@ final class WebWallpaperView: NSView, WallpaperPlaybackControlling {
     }
 
     func setPaused(_ paused: Bool) {
+        isPaused = paused
         isHidden = paused
         let command = paused
             ? "document.querySelectorAll('video,audio').forEach((media) => media.pause())"
@@ -46,4 +48,12 @@ final class WebWallpaperView: NSView, WallpaperPlaybackControlling {
     }
 
     func setFillMode(_ fillMode: VideoFillMode) {}
+
+    func recoverAfterSystemTransition(isPaused: Bool) {
+        self.isPaused = isPaused
+        isHidden = isPaused
+        webView.frame = bounds
+        webView.setNeedsDisplay(bounds)
+        setPaused(isPaused)
+    }
 }

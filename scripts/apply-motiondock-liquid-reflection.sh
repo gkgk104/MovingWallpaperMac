@@ -6,7 +6,6 @@ cd "$ROOT_DIR"
 
 SRC_DIR="Sources/MovingWallpaperMac"
 RESOURCE_ASSETS="$SRC_DIR/Resources/Assets.xcassets"
-REQUESTED_ASSETS="Assets.xcassets"
 BRAND_SRC_DIR="assets/brand"
 
 require_file() {
@@ -66,52 +65,38 @@ find_logo_asset() {
     printf '%s\n' "$BRAND_SRC_DIR/motiondock-logo.png"
   elif [[ -f "motiondock logo.png" ]]; then
     printf '%s\n' "motiondock logo.png"
-  elif [[ -f "$RESOURCE_ASSETS/Brand/MotionDockLogo.imageset/motiondock-logo-mark-placeholder@2x.png" ]]; then
-    printf '%s\n' "$RESOURCE_ASSETS/Brand/MotionDockLogo.imageset/motiondock-logo-mark-placeholder@2x.png"
-  else
-    printf '\n'
-  fi
-}
-
-find_icon_asset() {
-  if [[ -f "$BRAND_SRC_DIR/motiondock-app-icon.png" ]]; then
-    printf '%s\n' "$BRAND_SRC_DIR/motiondock-app-icon.png"
-  elif [[ -f "motiondock logo.png" ]]; then
-    printf '%s\n' "motiondock logo.png"
-  elif [[ -f "$RESOURCE_ASSETS/AppIcon.appiconset/icon_512x512@2x.png" ]]; then
-    printf '%s\n' "$RESOURCE_ASSETS/AppIcon.appiconset/icon_512x512@2x.png"
   else
     printf '\n'
   fi
 }
 
 create_asset_catalogs() {
-  local logo_source icon_source
+  local logo_source menu_bar_source wordmark_source
   logo_source="$(find_logo_asset)"
-  icon_source="$(find_icon_asset)"
+  menu_bar_source="$BRAND_SRC_DIR/motiondock-menu-bar-icon.png"
+  wordmark_source="$BRAND_SRC_DIR/motiondock-wordmark.png"
 
-  for catalog in "$REQUESTED_ASSETS" "$RESOURCE_ASSETS"; do
-    mkdir -p "$catalog/Brand" "$catalog/MotionDockLogo.imageset" "$catalog/MotionDockAppIcon.imageset"
-    mkdir -p "$catalog/Brand/MotionDockLogo.imageset"
-    write_contents_json "$catalog/Contents.json"
-    write_contents_json "$catalog/Brand/Contents.json"
+  mkdir -p "$RESOURCE_ASSETS/Brand/MotionDockLogo.imageset"
+  mkdir -p "$RESOURCE_ASSETS/Brand/MotionDockWordmark.imageset"
+  mkdir -p "$RESOURCE_ASSETS/Brand/MotionDockMenuBarIcon.imageset"
+  write_contents_json "$RESOURCE_ASSETS/Contents.json"
+  write_contents_json "$RESOURCE_ASSETS/Brand/Contents.json"
 
-    write_imageset_json "$catalog/MotionDockLogo.imageset/Contents.json" "motiondock-logo.png"
-    write_imageset_json "$catalog/Brand/MotionDockLogo.imageset/Contents.json" "motiondock-logo.png"
-    write_imageset_json "$catalog/MotionDockAppIcon.imageset/Contents.json" "motiondock-app-icon.png"
+  write_imageset_json "$RESOURCE_ASSETS/Brand/MotionDockLogo.imageset/Contents.json" "motiondock-logo.png"
+  write_imageset_json "$RESOURCE_ASSETS/Brand/MotionDockWordmark.imageset/Contents.json" "motiondock-wordmark.png"
+  write_imageset_json "$RESOURCE_ASSETS/Brand/MotionDockMenuBarIcon.imageset/Contents.json" "motiondock-menu-bar-icon.png"
 
-    if copy_if_possible "$logo_source" "$catalog/MotionDockLogo.imageset/motiondock-logo.png"; then
-      cp "$catalog/MotionDockLogo.imageset/motiondock-logo.png" "$catalog/Brand/MotionDockLogo.imageset/motiondock-logo.png"
-      cp "$catalog/MotionDockLogo.imageset/motiondock-logo.png" "$catalog/Brand/MotionDockLogo.imageset/motiondock-logo-mark-placeholder.png"
-      cp "$catalog/MotionDockLogo.imageset/motiondock-logo.png" "$catalog/Brand/MotionDockLogo.imageset/motiondock-logo-mark-placeholder@2x.png"
-    else
-      echo "No logo asset found. Add assets/brand/motiondock-logo.png to replace placeholders." >&2
-    fi
+  if ! copy_if_possible "$logo_source" "$RESOURCE_ASSETS/Brand/MotionDockLogo.imageset/motiondock-logo.png"; then
+    echo "No logo asset found. Add assets/brand/motiondock-logo.png." >&2
+  fi
 
-    if ! copy_if_possible "$icon_source" "$catalog/MotionDockAppIcon.imageset/motiondock-app-icon.png"; then
-      echo "No app icon asset found. Add assets/brand/motiondock-app-icon.png to replace placeholders." >&2
-    fi
-  done
+  if ! copy_if_possible "$wordmark_source" "$RESOURCE_ASSETS/Brand/MotionDockWordmark.imageset/motiondock-wordmark.png"; then
+    echo "No wordmark asset found. Add assets/brand/motiondock-wordmark.png." >&2
+  fi
+
+  if ! copy_if_possible "$menu_bar_source" "$RESOURCE_ASSETS/Brand/MotionDockMenuBarIcon.imageset/motiondock-menu-bar-icon.png"; then
+    echo "No menu bar icon asset found. Add assets/brand/motiondock-menu-bar-icon.png." >&2
+  fi
 }
 
 write_theme_file() {
@@ -501,22 +486,9 @@ from pathlib import Path
 path = Path("Sources/MovingWallpaperMac/Branding.swift")
 text = path.read_text()
 
-if "static let appIconAssetName" not in text:
-    text = text.replace(
-'''    static let logoSubdirectory = "Assets.xcassets/Brand/MotionDockLogo.imageset"
-    static let wordmarkSubdirectory = "Assets.xcassets/Brand/MotionDockWordmark.imageset"
-    static let appIconSubdirectory = "Assets.xcassets/AppIcon.appiconset"
-''',
-'''    static let appIconAssetName = "MotionDockAppIcon"
-    static let logoSubdirectory = "Assets.xcassets/Brand/MotionDockLogo.imageset"
-    static let wordmarkSubdirectory = "Assets.xcassets/Brand/MotionDockWordmark.imageset"
-    static let appIconSubdirectory = "Assets.xcassets/AppIcon.appiconset"
-'''
-    )
-
 old = '''    static func logoImage() -> NSImage? {
         imageResource(
-            named: "motiondock-logo-mark-placeholder@2x",
+            named: "motiondock-logo",
             subdirectory: logoSubdirectory
         )
     }
@@ -527,7 +499,6 @@ new = '''    static func logoImage() -> NSImage? {
         }
 
         return imageResource(named: "motiondock-logo", subdirectory: logoSubdirectory)
-            ?? imageResource(named: "motiondock-logo-mark-placeholder@2x", subdirectory: logoSubdirectory)
     }
 '''
 text = text.replace(old, new)
@@ -545,8 +516,8 @@ old = '''    static func statusBarIcon() -> NSImage? {
     }
 '''
 new = '''    static func statusBarIcon() -> NSImage? {
-        let source = NSImage(named: appIconAssetName)
-            ?? imageResource(named: "motiondock-app-icon", subdirectory: "Assets.xcassets/MotionDockAppIcon.imageset")
+        let source = imageResource(named: "motiondock-menu-bar-icon", subdirectory: menuBarIconSubdirectory)
+            ?? imageResource(named: "motiondock-menu-bar-icon@2x", subdirectory: menuBarIconSubdirectory)
             ?? imageResource(named: "icon_32x32@2x", subdirectory: appIconSubdirectory)
             ?? NSImage(named: NSImage.applicationIconName)
 

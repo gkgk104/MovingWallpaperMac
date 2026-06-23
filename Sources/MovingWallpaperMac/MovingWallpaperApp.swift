@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Darwin
 import SwiftUI
 
 private enum MotionDockDefaultsMigration {
@@ -38,10 +39,61 @@ private enum LaunchContext {
     static var shouldStartHidden = false
 
     static func resolveShouldStartHidden(model: AppModel) -> Bool {
-        let wasLaunchedByFinderOrOpen = ProcessInfo.processInfo.arguments.contains { argument in
-            argument.hasPrefix("-psn_")
+        let arguments = ProcessInfo.processInfo.arguments
+        let environment = ProcessInfo.processInfo.environment
+        let hiddenLaunchArguments: Set<String> = [
+            "--motiondock-start-hidden",
+            "--motiondock-login-item",
+            "--start-hidden",
+            "--background",
+            "-background",
+            "-hide"
+        ]
+
+        let hasHiddenLaunchArgument = arguments.contains { argument in
+            hiddenLaunchArguments.contains(argument)
         }
-        return model.startAtLoginEnabled && !wasLaunchedByFinderOrOpen
+        let hasHiddenLaunchEnvironment = [
+            "MOTIONDOCK_START_HIDDEN",
+            "MOTIONDOCK_LOGIN_ITEM"
+        ].contains { key in
+            guard let value = environment[key]?.lowercased() else {
+                return false
+            }
+            return ["1", "true", "yes"].contains(value)
+        }
+
+        let shouldStartHidden = hasHiddenLaunchArgument || hasHiddenLaunchEnvironment
+        let reason: String
+        if hasHiddenLaunchArgument {
+            reason = "explicit launch argument"
+        } else if hasHiddenLaunchEnvironment {
+            reason = "explicit launch environment"
+        } else {
+            reason = "normal launch"
+        }
+
+        NSLog(
+            "[MotionDock Launch] shouldStartHidden=%@ reason=%@ startAtLoginEnabled=%@ arguments=%@",
+            shouldStartHidden ? "true" : "false",
+            reason,
+            model.startAtLoginEnabled ? "true" : "false",
+            arguments.joined(separator: " ")
+        )
+        return shouldStartHidden
+    }
+}
+
+@MainActor
+enum MotionDockDockVisibility {
+    static func apply(showInDock: Bool, activateMainWindow: Bool) {
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
+
+        guard showInDock, activateMainWindow else {
+            return
+        }
+
+        MainWindowRegistry.shared.restoreMainWindow(in: NSApp)
     }
 }
 
@@ -79,10 +131,28 @@ struct MovingWallpaperApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let openExistingInstanceNotification = Notification.Name("local.codex.motiondock.openExistingInstance")
+    static weak var shared: AppDelegate?
 
-    private var isQuittingFromMenu = false
+    private static let openExistingInstanceNotification = Notification.Name("com.motiondock.app.openExistingInstance")
+
+    private var didPrepareForFullQuit = false
     private var isTerminatingDuplicateInstance = false
+    private var quitFallbackWorkItem: DispatchWorkItem?
+    private var pendingCallbackURLs: [URL] = []
+
+    override init() {
+        super.init()
+        Self.shared = self
+    }
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if terminateIfDuplicateInstanceIsRunning() {
@@ -90,10 +160,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.disableRelaunchOnLogin()
-        NSApp.setActivationPolicy(.accessory)
+        MotionDockDockVisibility.apply(showInDock: AppModel.shared.showInDock, activateMainWindow: false)
         DistributedNotificationCenter.default().addObserver(
             self,
-            selector: #selector(openExistingInstance),
+            selector: #selector(openExistingInstance(_:)),
             name: Self.openExistingInstanceNotification,
             object: nil
         )
@@ -103,6 +173,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppModel.shared.restoreLastWallpaperOnLaunch()
 
         DispatchQueue.main.async {
+            NSLog(
+                "[MotionDock Launch] didFinishLaunching applying initial window state shouldStartHidden=%@",
+                LaunchContext.shouldStartHidden ? "true" : "false"
+            )
             if LaunchContext.shouldStartHidden {
                 MainWindowRegistry.shared.hideMainWindow(in: NSApplication.shared)
             } else {
@@ -116,26 +190,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        (isQuittingFromMenu || isTerminatingDuplicateInstance) ? .terminateNow : .terminateCancel
+        if isTerminatingDuplicateInstance {
+            return .terminateNow
+        }
+
+        prepareForFullQuit()
+        scheduleQuitFallback()
+        return .terminateNow
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NSLog(
+            "[MotionDock Launch] applicationShouldHandleReopen hasVisibleWindows=%@",
+            flag ? "true" : "false"
+        )
         MainWindowRegistry.shared.restoreMainWindow(in: sender)
         return true
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        handleCallbackURLs(urls)
+    }
+
     func quitFromMenu() {
-        isQuittingFromMenu = true
-        AppModel.shared.stopForQuit()
+        prepareForFullQuit()
         NSApp.terminate(nil)
+        scheduleQuitFallback()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        quitFallbackWorkItem?.cancel()
+        quitFallbackWorkItem = nil
+        NSAppleEventManager.shared().removeEventHandler(
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
         DistributedNotificationCenter.default().removeObserver(self)
     }
 
+    private func prepareForFullQuit() {
+        guard !didPrepareForFullQuit else {
+            return
+        }
+
+        didPrepareForFullQuit = true
+        AppModel.shared.stopForQuit()
+        MotionDockStatusItemController.shared.removeStatusItem()
+    }
+
+    private func scheduleQuitFallback() {
+        guard quitFallbackWorkItem == nil else {
+            return
+        }
+
+        let fallback = DispatchWorkItem {
+            exit(EXIT_SUCCESS)
+        }
+        quitFallbackWorkItem = fallback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75, execute: fallback)
+    }
+
     private func terminateIfDuplicateInstanceIsRunning() -> Bool {
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "local.codex.motiondock"
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.motiondock.app"
         let currentPID = ProcessInfo.processInfo.processIdentifier
         let existingInstance = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleIdentifier)
@@ -150,7 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DistributedNotificationCenter.default().postNotificationName(
             Self.openExistingInstanceNotification,
             object: nil,
-            userInfo: nil,
+            userInfo: notificationUserInfo(for: pendingCallbackURLs),
             deliverImmediately: true
         )
         existingInstance.activate(options: [.activateIgnoringOtherApps])
@@ -159,8 +275,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    @objc private func openExistingInstance() {
+    @objc private func openExistingInstance(_ notification: Notification) {
+        NSLog("[MotionDock Launch] openExistingInstance notification received")
+        if let rawURLs = notification.userInfo?["urls"] as? [String] {
+            handleCallbackURLs(rawURLs.compactMap(URL.init(string:)))
+        }
         MainWindowRegistry.shared.restoreMainWindow(in: NSApplication.shared)
+    }
+
+    @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        guard
+            let rawURL = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+            let url = URL(string: rawURL)
+        else {
+            NSLog("[MotionDock OAuth] received URL event but no valid URL was present")
+            return
+        }
+
+        NSLog("[MotionDock OAuth] received URL event: %@", url.absoluteString)
+        pendingCallbackURLs.append(url)
+        handleCallbackURLs([url])
+    }
+
+    private func handleCallbackURLs(_ urls: [URL]) {
+        urls.forEach { url in
+            AppModel.shared.handleAuthCallbackURL(url)
+        }
+    }
+
+    private func notificationUserInfo(for urls: [URL]) -> [String: Any]? {
+        let rawURLs = urls.map(\.absoluteString)
+        return rawURLs.isEmpty ? nil : ["urls": rawURLs]
     }
 }
 
@@ -204,22 +349,31 @@ private final class MainWindowRegistry {
         )
         constrainToVisibleScreen(window)
 
+        NSLog(
+            "[MotionDock Window] registered main window startsHidden=%@ isVisible=%@",
+            startsHidden ? "true" : "false",
+            window.isVisible ? "true" : "false"
+        )
         if startsHidden {
+            NSLog("[MotionDock Window] ordering out main window for explicit hidden launch")
             window.orderOut(nil)
         }
     }
 
     func hideMainWindow(in application: NSApplication) {
+        NSLog("[MotionDock Window] hideMainWindow requested")
         application.windows
             .filter(Self.isMainControlWindow)
             .forEach { $0.orderOut(nil) }
     }
 
     func restoreMainWindow(in application: NSApplication) {
+        NSLog("[MotionDock Window] restoreMainWindow requested")
         application.unhide(nil)
         startsHidden = false
 
         guard let window = mainWindow ?? application.windows.first(where: Self.isMainControlWindow) else {
+            NSLog("[MotionDock Window] no registered main window yet; activating app")
             application.activate(ignoringOtherApps: true)
             return
         }
@@ -281,8 +435,21 @@ private final class MainWindowCloseDelegate: NSObject, NSWindowDelegate {
     static let shared = MainWindowCloseDelegate()
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)
+        if sender.styleMask.contains(.fullScreen) {
+            NSLog("[MotionDock Window] red close requested in fullscreen; exiting fullscreen only")
+            sender.toggleFullScreen(nil)
+        } else {
+            NSLog("[MotionDock Window] red close requested in normal window mode; hiding main window")
+            hideMainWindow(sender)
+        }
         return false
+    }
+
+    private func hideMainWindow(_ window: NSWindow) {
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.orderOut(nil)
     }
 }
 
@@ -361,7 +528,14 @@ private final class MotionDockStatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func quitMotionDock() {
-        (NSApp.delegate as? AppDelegate)?.quitFromMenu()
+        if let appDelegate = AppDelegate.shared ?? NSApp.delegate as? AppDelegate {
+            appDelegate.quitFromMenu()
+            return
+        }
+
+        AppModel.shared.stopForQuit()
+        removeStatusItem()
+        exit(EXIT_SUCCESS)
     }
 
     private func updateMenuState() {
@@ -371,5 +545,16 @@ private final class MotionDockStatusItemController: NSObject, NSMenuDelegate {
         startItem.isEnabled = model.canStart
         stopItem.isEnabled = model.isRunning
         restoreItem.isEnabled = model.canRestoreLastWallpaper
+    }
+
+    func removeStatusItem() {
+        cancellable = nil
+
+        guard let statusItem else {
+            return
+        }
+
+        NSStatusBar.system.removeStatusItem(statusItem)
+        self.statusItem = nil
     }
 }

@@ -16,6 +16,7 @@ final class VideoWallpaperView: NSView, WallpaperPlaybackControlling {
     private let player = AVQueuePlayer()
     private let playerLayer: AVPlayerLayer
     private var looper: AVPlayerLooper?
+    private var isPaused = false
 
     init(url: URL, muted: Bool, fillMode: VideoFillMode) throws {
         guard FileManager.default.isReadableFile(atPath: url.path) else {
@@ -55,6 +56,7 @@ final class VideoWallpaperView: NSView, WallpaperPlaybackControlling {
     }
 
     func setPaused(_ paused: Bool) {
+        isPaused = paused
         if paused {
             player.pause()
         } else {
@@ -64,6 +66,19 @@ final class VideoWallpaperView: NSView, WallpaperPlaybackControlling {
 
     func setFillMode(_ fillMode: VideoFillMode) {
         playerLayer.videoGravity = fillMode.videoGravity
+    }
+
+    func recoverAfterSystemTransition(isPaused: Bool) {
+        self.isPaused = isPaused
+        playerLayer.player = player
+        playerLayer.frame = bounds
+        needsLayout = true
+
+        if isPaused {
+            player.pause()
+        } else {
+            player.play()
+        }
     }
 
     deinit {

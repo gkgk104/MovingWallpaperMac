@@ -253,7 +253,7 @@ struct MotionDockSidebarItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MotionDockSidebarRowButtonStyle(isSelected: isSelected, isHovered: isHovered))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .clipped()

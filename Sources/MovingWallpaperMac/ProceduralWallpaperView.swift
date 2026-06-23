@@ -41,6 +41,11 @@ final class MotionWallpaperHostView: NSHostingView<ProceduralWallpaperView>, Wal
     func setMuted(_ muted: Bool) {}
 
     func setFillMode(_ fillMode: VideoFillMode) {}
+
+    func recoverAfterSystemTransition(isPaused: Bool) {
+        setPaused(isPaused)
+        needsDisplay = true
+    }
 }
 
 struct ProceduralWallpaperView: View {

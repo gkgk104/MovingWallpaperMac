@@ -199,6 +199,69 @@ struct WallpaperLibraryItem: Codable, Equatable, Identifiable {
     var motionScene: MotionScene
     var motionPalette: MotionPalette
     var isBuiltIn: Bool
+    var uploaderID: String?
+
+    init(
+        id: String,
+        name: String,
+        kind: WallpaperItemKind,
+        videoPath: String?,
+        webURLString: String?,
+        motionScene: MotionScene,
+        motionPalette: MotionPalette,
+        isBuiltIn: Bool,
+        uploaderID: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.videoPath = videoPath
+        self.webURLString = webURLString
+        self.motionScene = motionScene
+        self.motionPalette = motionPalette
+        self.isBuiltIn = isBuiltIn
+        self.uploaderID = uploaderID
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case kind
+        case videoPath
+        case webURLString
+        case motionScene
+        case motionPalette
+        case isBuiltIn
+        case uploaderID = "uploader_id"
+        case legacyUploaderID = "uploaderID"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        kind = try container.decode(WallpaperItemKind.self, forKey: .kind)
+        videoPath = try container.decodeIfPresent(String.self, forKey: .videoPath)
+        webURLString = try container.decodeIfPresent(String.self, forKey: .webURLString)
+        motionScene = try container.decode(MotionScene.self, forKey: .motionScene)
+        motionPalette = try container.decode(MotionPalette.self, forKey: .motionPalette)
+        isBuiltIn = try container.decode(Bool.self, forKey: .isBuiltIn)
+        uploaderID = try container.decodeIfPresent(String.self, forKey: .uploaderID)
+            ?? container.decodeIfPresent(String.self, forKey: .legacyUploaderID)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(kind, forKey: .kind)
+        try container.encodeIfPresent(videoPath, forKey: .videoPath)
+        try container.encodeIfPresent(webURLString, forKey: .webURLString)
+        try container.encode(motionScene, forKey: .motionScene)
+        try container.encode(motionPalette, forKey: .motionPalette)
+        try container.encode(isBuiltIn, forKey: .isBuiltIn)
+        try container.encodeIfPresent(uploaderID, forKey: .uploaderID)
+    }
 
     var detail: String {
         switch kind {

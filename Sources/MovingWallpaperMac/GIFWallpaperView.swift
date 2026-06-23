@@ -15,6 +15,7 @@ final class GIFWallpaperView: NSView, WallpaperPlaybackControlling {
     private let imageView = NSImageView()
     private let imageSize: CGSize
     private var fillMode: VideoFillMode
+    private var isPaused = false
 
     init(url: URL, fillMode: VideoFillMode) throws {
         guard let image = NSImage(contentsOf: url), image.isValid, image.size.width > 0, image.size.height > 0 else {
@@ -48,6 +49,7 @@ final class GIFWallpaperView: NSView, WallpaperPlaybackControlling {
     }
 
     func setPaused(_ paused: Bool) {
+        isPaused = paused
         imageView.animates = !paused
     }
 
@@ -55,6 +57,14 @@ final class GIFWallpaperView: NSView, WallpaperPlaybackControlling {
 
     func setFillMode(_ fillMode: VideoFillMode) {
         self.fillMode = fillMode
+        needsLayout = true
+    }
+
+    func recoverAfterSystemTransition(isPaused: Bool) {
+        self.isPaused = isPaused
+        imageView.animates = false
+        imageView.frame = imageFrame(for: bounds.size)
+        imageView.animates = !isPaused
         needsLayout = true
     }
 

@@ -10,7 +10,7 @@ Tagline:
 Live wallpapers, made native for macOS.
 ```
 
-It supports built-in motion wallpapers, local MP4/MOV/GIF files, web URL wallpapers, favorites, profiles, multi-display playback, performance policies, and a local self-hosted marketplace server.
+It supports built-in motion wallpapers, local MP4/MOV/GIF files, web URL wallpapers, favorites, Supabase-backed profiles, multi-display playback, performance policies, and a marketplace.
 
 ## Launch
 
@@ -32,7 +32,7 @@ MotionDock uses a three-column layout.
 - `Favorites`: wallpapers marked as favorites.
 - `Recently Added`: imported wallpapers.
 - `Discover`: placeholder for curated wallpapers.
-- `Profiles`: local profile used for upload attribution.
+- `Profiles`: Supabase account used for upload attribution.
 - `Settings`: playback, performance, and marketplace settings.
 
 ### Center Grid
@@ -91,14 +91,25 @@ Discover curated motion wallpapers soon.
 
 ## Profiles
 
-Profiles are local to this Mac for now.
+Profiles are backed by Supabase Auth.
 
-1. Open `Profiles`.
-2. Enter a display name.
-3. Optionally enter a handle.
-4. Press `Create Profile`.
+1. Open `Profiles` or `Settings`.
+2. If MotionDock says Supabase is not configured, enter your Supabase project URL and anon key.
+3. Press `Save Supabase Settings`.
+4. Press `Sign in with Google`.
+5. After sign-in, MotionDock syncs your user id, display name, email, and avatar URL to the Supabase `profiles` table.
 
-Marketplace uploads include the profile display name and profile ID.
+For Google login, configure Supabase Auth with:
+
+- Provider: Google
+- Supabase redirect URL allow list: `motiondock://auth-callback`
+- Google Cloud OAuth authorized redirect URI: `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
+
+Marketplace uploads include your Supabase `uploader_id` so uploaded wallpapers can be attributed to the right account.
+
+Marketplace uploads support MP4, MOV, M4V, and GIF files up to 250 MB.
+Each signed-in uploader can publish up to 1 GB of marketplace files.
+Marketplace uploads may require moderator approval before they become downloadable.
 
 ## Settings
 
@@ -123,14 +134,47 @@ Marketplace uploads include the profile display name and profile ID.
 - `Start MotionDock when I log in`: registers MotionDock as a macOS Login Item.
 - When MotionDock starts from login, it stays hidden in the menu bar and restores the last wallpaper automatically if one was saved.
 
-### Self-hosted Marketplace
+### Marketplace
 
-The marketplace server is an advanced local feature.
+When Supabase is configured, MotionDock uses the Supabase `wallpapers` table and `wallpapers` Storage bucket.
+
+Configure Supabase from Settings -> MotionDock 계정, or from Profiles when MotionDock shows the configuration prompt. MotionDock saves the configuration to:
+
+```text
+~/Library/Application Support/MotionDock/Supabase.plist
+```
+
+You can also configure Supabase with environment variables:
+
+```bash
+export MOTIONDOCK_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
+export MOTIONDOCK_SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
+```
+
+or create the plist manually:
+
+```text
+~/Library/Application Support/MotionDock/Supabase.plist
+```
+
+The plist format is shown in:
+
+```text
+Sources/MovingWallpaperMac/Resources/Supabase.example.plist
+```
+
+Create the required Supabase tables and Storage policies with:
+
+```text
+docs/supabase-schema.sql
+```
+
+If Supabase is not configured, MotionDock can still use the advanced local self-hosted marketplace server.
 
 Start it:
 
 ```bash
-cd /Users/leehyunbin/codes/MovingWallpaperMac
+cd /Users/leehyunbin/codes/MotionDock
 ./scripts/start-marketplace-server.sh
 ```
 
@@ -146,7 +190,7 @@ Default URL:
 http://127.0.0.1:8787
 ```
 
-Downloaded files are stored at:
+Downloaded marketplace files are stored at:
 
 ```text
 ~/Library/Application Support/MotionDock/Marketplace Downloads/
@@ -186,4 +230,7 @@ MotionDock is hidden from the Dock by design. Use the menu bar icon and choose `
 
 - MotionDock renders live wallpaper windows; it does not permanently replace the macOS system wallpaper file.
 - Full-screen Spaces and Mission Control can change how desktop-level windows are presented.
-- The marketplace server is not production-ready authentication infrastructure.
+- The local marketplace server is a fallback development tool, not production authentication infrastructure.
+- Marketplace publishing is experimental for beta builds until the production Supabase project and upload/download QA are complete.
+
+Before sharing a beta build, use `docs/beta-qa-checklist.md` and update `docs/beta-known-issues.md`.

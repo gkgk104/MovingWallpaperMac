@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 enum MotionDockLayout {
-    static let sidebarWidth: CGFloat = 230
-    static let inspectorWidth: CGFloat = 340
+    static let sidebarWidth: CGFloat = 240
+    static let inspectorWidth: CGFloat = 320
     static let inspectorHorizontalPadding: CGFloat = 24
     static let inspectorVerticalPadding: CGFloat = 24
     static let inspectorContentWidth: CGFloat = inspectorWidth - inspectorHorizontalPadding * 2
@@ -21,28 +21,38 @@ enum MotionDockLayout {
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @StateObject private var thumbnailStore = WallpaperThumbnailStore()
-    @State private var selectedSection: SidebarSection = .library
+    @State private var selectedSection: SidebarSection = .defaultSection
     @State private var selectedItemID: String
+    @State private var observedSettingsRequestCounter: Int
     @State private var searchText = ""
     @State private var isURLImportPresented = false
+    @State private var isDiscoverUploadPresented = false
+    @State private var editingMyUpload: DiscoverWallpaper?
+    @State private var deletingMyUpload: DiscoverWallpaper?
+    @State private var discoverSearchText = ""
+    @State private var discoverSortOption: DiscoverSortOption = .all
+    @State private var discoverCategoryFilter: DiscoverCategoryFilter = .all
     @State private var playlistEnabled: Bool
     @State private var playlistIntervalMinutes: Double
     @State private var displayMode: DisplayMode
     @State private var performanceProfile: PerformanceProfile
     @State private var performancePolicy: PerformancePolicy
     @State private var startAtLoginEnabled: Bool
+    @State private var showInDock: Bool
     @State private var isMuted: Bool
     @State private var fillMode: VideoFillMode
 
     init(model: AppModel) {
         self.model = model
         _selectedItemID = State(initialValue: model.selectedItemID)
+        _observedSettingsRequestCounter = State(initialValue: model.settingsRequestCounter)
         _playlistEnabled = State(initialValue: model.playlistEnabled)
         _playlistIntervalMinutes = State(initialValue: model.playlistIntervalMinutes)
         _displayMode = State(initialValue: model.displayMode)
         _performanceProfile = State(initialValue: model.performanceProfile)
         _performancePolicy = State(initialValue: model.performancePolicy)
         _startAtLoginEnabled = State(initialValue: model.startAtLoginEnabled)
+        _showInDock = State(initialValue: model.showInDock)
         _isMuted = State(initialValue: model.isMuted)
         _fillMode = State(initialValue: model.fillMode)
     }
@@ -54,7 +64,10 @@ struct ContentView: View {
             let dividerWidth = MotionDockLayout.dividerWidth
             let minMainWidth = MotionDockLayout.minMainWidth
             let minWindowWidthForDetail = sidebarWidth + minMainWidth + detailWidth + dividerWidth * 2
-            let shouldShowDetail = model.selectedItem != nil && proxy.size.width >= minWindowWidthForDetail
+            let hasDetailSelection = selectedSection == .discover
+                ? model.selectedDiscoverWallpaper != nil
+                : model.selectedItem != nil
+            let shouldShowDetail = hasDetailSelection && proxy.size.width >= minWindowWidthForDetail
             let calculatedMainWidth = proxy.size.width
                 - sidebarWidth
                 - (shouldShowDetail ? detailWidth : 0)
@@ -68,7 +81,6 @@ struct ContentView: View {
                 MotionDockSidebar(
                     selection: $selectedSection,
                     libraryCount: model.libraryItems.count,
-                    collectionCount: collectionItems.count,
                     favoriteCount: model.favoriteItemIDs.count,
                     recentCount: recentlyAddedItems.count,
                     isRunning: model.isRunning
@@ -106,6 +118,12 @@ struct ContentView: View {
             MotionDockAmbientBackground()
         }
         .foregroundStyle(Color.white.opacity(0.92))
+        .onAppear {
+            let resolvedSection = selectedSection.resolvedForDisplay
+            if resolvedSection != selectedSection {
+                selectedSection = resolvedSection
+            }
+        }
         .sheet(isPresented: $isURLImportPresented) {
             URLImportSheet(
                 urlString: $model.webURLDraft,
@@ -119,6 +137,34 @@ struct ContentView: View {
                     selectedSection = .library
                 }
             )
+        }
+        .sheet(isPresented: $isDiscoverUploadPresented) {
+            DiscoverUploadSheet(model: model)
+        }
+        .sheet(item: $editingMyUpload) { item in
+            MyUploadEditSheet(model: model, item: item)
+        }
+        .alert(
+            "Delete Upload?",
+            isPresented: Binding(
+                get: { deletingMyUpload != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        deletingMyUpload = nil
+                    }
+                }
+            ),
+            presenting: deletingMyUpload
+        ) { item in
+            Button("Delete", role: .destructive) {
+                model.deleteMyUpload(item)
+                deletingMyUpload = nil
+            }
+            Button("Cancel", role: .cancel) {
+                deletingMyUpload = nil
+            }
+        } message: { item in
+            Text("This removes \(item.displayTitle) from Supabase and deletes its R2 video and thumbnail files.")
         }
         .onReceive(model.$selectedItemID) { value in
             if selectedItemID != value {
@@ -155,9 +201,25 @@ struct ContentView: View {
                 startAtLoginEnabled = value
             }
         }
+        .onReceive(model.$showInDock) { value in
+            if showInDock != value {
+                showInDock = value
+            }
+        }
         .onReceive(model.$settingsRequestCounter) { _ in
+            guard model.settingsRequestCounter != observedSettingsRequestCounter else {
+                return
+            }
+
+            observedSettingsRequestCounter = model.settingsRequestCounter
             withAnimation(MotionDockTheme.animation) {
                 selectedSection = .settings
+            }
+        }
+        .onChange(of: selectedSection) { section in
+            let resolvedSection = section.resolvedForDisplay
+            if resolvedSection != section {
+                selectedSection = resolvedSection
             }
         }
         .onReceive(model.$isMuted) { value in
@@ -172,22 +234,30 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
     private var inspectorPanel: some View {
-        InspectorPanel(
-            model: model,
-            thumbnailStore: thumbnailStore,
-            item: model.selectedItem,
-            isFavorite: model.selectedItem.map(model.isFavorite) ?? false,
-            onStart: model.start,
-            onStop: model.stop,
-            onReveal: model.revealSelectedInFinder,
-            onFavorite: {
-                if let item = model.selectedItem {
-                    model.toggleFavorite(item)
-                }
-            },
-            onRemove: model.removeSelectedItem
-        )
+        if selectedSection == .discover {
+            MarketplaceDetailPanel(
+                model: model,
+                item: model.selectedDiscoverWallpaper
+            )
+        } else {
+            InspectorPanel(
+                model: model,
+                thumbnailStore: thumbnailStore,
+                item: model.selectedItem,
+                isFavorite: model.selectedItem.map(model.isFavorite) ?? false,
+                onStart: model.start,
+                onStop: model.stop,
+                onReveal: model.revealSelectedInFinder,
+                onFavorite: {
+                    if let item = model.selectedItem {
+                        model.toggleFavorite(item)
+                    }
+                },
+                onRemove: model.removeSelectedItem
+            )
+        }
     }
 
     @ViewBuilder
@@ -197,12 +267,8 @@ struct ContentView: View {
             wallpaperGridPage
                 .transition(.opacity)
         case .discover:
-            placeholderPage(
-                icon: "sparkles.rectangle.stack",
-                title: "Discover",
-                message: "Discover curated motion wallpapers soon."
-            )
-            .transition(.opacity)
+            discoverPage
+                .transition(.opacity)
         case .profiles:
             profilesPage
                 .transition(.opacity)
@@ -277,90 +343,611 @@ struct ContentView: View {
         .animation(MotionDockTheme.animation, value: filteredWallpapers.map(\.id))
     }
 
-    private var profilesPage: some View {
+    private var discoverPage: some View {
         VStack(alignment: .leading, spacing: 22) {
             pageHeader(
-                title: "Profiles",
-                subtitle: "Use a local profile to identify your uploads and personalize MotionDock.",
+                title: "Discover",
+                subtitle: "Browse public motion wallpapers from the MotionDock marketplace.",
                 showsImport: false
             )
 
-            if !model.profileIsLoggedIn {
-                emptyState(
-                    icon: "person.crop.circle.badge.plus",
-                    title: "Profiles",
-                    message: "Create a local profile to attach your name to uploaded wallpapers."
+            discoverToolbar
+
+            discoverFilterBar
+
+            if let message = model.discoverMessage, !model.discoverWallpapers.isEmpty {
+                MessageBanner(
+                    message: message,
+                    style: isMarketplaceErrorMessage(message) ? .error : .neutral
                 )
-                .frame(maxHeight: 220)
+                .transition(.opacity)
             }
 
-            PremiumPanel {
-                VStack(alignment: .leading, spacing: 18) {
-                    SectionHeader("Local Profile")
-
-                    InspectorInfoRow(label: "Status") {
-                        StatusPill(text: model.profileIsLoggedIn ? "Running" : "Stopped", isRunning: model.profileIsLoggedIn)
-                    }
-
-                    LabeledControl(title: "Display Name") {
-                        MotionDockTextField("Display name", text: $model.profileDisplayName)
-                            .frame(maxWidth: 360)
-                    }
-
-                    LabeledControl(title: "Handle") {
-                        HStack(spacing: 6) {
-                            Text("@")
-                                .foregroundStyle(MotionDockTheme.secondaryText)
-                            MotionDockTextField("handle", text: $model.profileHandle)
-                                .frame(maxWidth: 260)
-                        }
-                    }
-
-                    InspectorInfoRow(label: "Uploader") {
-                        Text(model.profileDisplayText)
-                            .foregroundStyle(model.profileIsLoggedIn ? Color.white.opacity(0.92) : MotionDockTheme.secondaryText)
-                            .lineLimit(1)
-                    }
-
-                    InspectorInfoRow(label: "Profile ID") {
-                        Text(model.profileID)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(MotionDockTheme.secondaryText)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                    }
-
-                    if let message = model.profileMessage {
-                        MessageBanner(message: message, style: message.contains("Enter") ? .error : .neutral)
-                    }
-
-                    HStack(spacing: 10) {
-                        Button {
-                            model.signInProfile()
-                        } label: {
-                            Label(model.profileIsLoggedIn ? "Update Profile" : "Create Profile", systemImage: "person.crop.circle.badge.checkmark")
-                        }
-                        .buttonStyle(MotionDockPrimaryButtonStyle())
-
-                        Button {
-                            model.signOutProfile()
-                        } label: {
-                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-                        .buttonStyle(MotionDockSecondaryButtonStyle())
-                        .disabled(!model.profileIsLoggedIn)
-                    }
-                }
-            }
-
-            Spacer()
+            discoverBody
         }
         .padding(.horizontal, 26)
         .padding(.vertical, 26)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             MotionDockAmbientBackground()
+        }
+        .task {
+            if model.discoverWallpapers.isEmpty && !model.discoverIsLoading {
+                model.refreshDiscoverWallpapers()
+            }
+        }
+        .animation(MotionDockTheme.animation, value: model.discoverIsLoading)
+        .animation(MotionDockTheme.animation, value: model.discoverWallpapers.map(\.id))
+        .onChange(of: discoverSearchText) { _ in
+            clearDiscoverSelectionIfHidden()
+        }
+        .onChange(of: discoverCategoryFilter.id) { _ in
+            clearDiscoverSelectionIfHidden()
+        }
+        .onChange(of: model.discoverWallpapers.map(\.id)) { _ in
+            clearDiscoverSelectionIfHidden()
+        }
+    }
+
+    private var discoverToolbar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                discoverToolbarActions
+
+                discoverSearchField
+                    .frame(width: 280)
+                    .layoutPriority(1)
+
+                StatusPill(
+                    text: discoverStatusText,
+                    isRunning: !model.discoverWallpapers.isEmpty && !model.discoverIsLoading
+                )
+
+                Spacer(minLength: 8)
+
+                discoverUserStatus
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                discoverToolbarActions
+
+                discoverSearchField
+                    .frame(maxWidth: 420)
+
+                HStack(spacing: 10) {
+                    StatusPill(
+                        text: discoverStatusText,
+                        isRunning: !model.discoverWallpapers.isEmpty && !model.discoverIsLoading
+                    )
+
+                    discoverUserStatus
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var discoverSearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(MotionDockTheme.secondaryText)
+                .frame(width: 16)
+
+            ZStack(alignment: .leading) {
+                if discoverSearchText.isEmpty {
+                    Text("Search wallpapers…")
+                        .foregroundStyle(MotionDockTheme.secondaryText.opacity(0.78))
+                        .lineLimit(1)
+                }
+
+                TextField("", text: $discoverSearchText)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+
+            if !discoverSearchText.isEmpty {
+                Button {
+                    discoverSearchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(MotionDockTheme.secondaryText.opacity(0.84))
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 42)
+        .background(MotionDockTheme.secondarySurface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(MotionDockTheme.border, lineWidth: 1)
+        }
+        .clipped()
+    }
+
+    private var discoverToolbarActions: some View {
+        HStack(spacing: 10) {
+            Button {
+                model.refreshDiscoverWallpapers()
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(MotionDockSecondaryButtonStyle())
+            .disabled(model.discoverIsLoading || model.discoverUploadIsLoading)
+
+            Button {
+                isDiscoverUploadPresented = true
+            } label: {
+                Label(
+                    model.discoverUploadIsLoading ? "Uploading..." : "Upload",
+                    systemImage: "square.and.arrow.up"
+                )
+            }
+            .buttonStyle(MotionDockSecondaryButtonStyle())
+            .disabled(model.discoverUploadIsLoading)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(2)
+    }
+
+    private var discoverFilterBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                MotionDockSegmentedPicker(
+                    options: DiscoverSortOption.allCases,
+                    selection: $discoverSortOption,
+                    title: { $0.title }
+                )
+                .frame(maxWidth: 540)
+
+                MotionDockOptionMenu(
+                    options: DiscoverCategoryFilter.allCases,
+                    selection: $discoverCategoryFilter,
+                    title: { $0.title }
+                )
+                .frame(width: 190)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                MotionDockSegmentedPicker(
+                    options: DiscoverSortOption.allCases,
+                    selection: $discoverSortOption,
+                    title: { $0.title }
+                )
+
+                MotionDockOptionMenu(
+                    options: DiscoverCategoryFilter.allCases,
+                    selection: $discoverCategoryFilter,
+                    title: { $0.title }
+                )
+                .frame(width: 220)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var discoverUserStatus: some View {
+        if let user = model.authenticatedUser {
+            Text("Signed in as \(user.displayName)")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(MotionDockTheme.secondaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
+        } else {
+            Text("Browsing as guest")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(MotionDockTheme.secondaryText)
+                .lineLimit(1)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    @ViewBuilder
+    private var discoverBody: some View {
+        let visibleWallpapers = filteredDiscoverWallpapers
+
+        if model.discoverIsLoading && model.discoverWallpapers.isEmpty {
+            MarketplaceStateCard(
+                systemImage: "arrow.triangle.2.circlepath",
+                title: "Loading Discover",
+                message: "Fetching public wallpapers from \(model.marketplaceBackendText).",
+                style: .loading
+            )
+            .frame(maxWidth: 520)
+        } else if let message = model.discoverMessage, model.discoverWallpapers.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                MarketplaceStateCard(
+                    systemImage: isMarketplaceErrorMessage(message) ? "exclamationmark.triangle" : "sparkles",
+                    title: isMarketplaceErrorMessage(message) ? "Discover Unavailable" : "No Wallpapers Yet",
+                    message: message,
+                    style: isMarketplaceErrorMessage(message) ? .error : .neutral
+                )
+                .frame(maxWidth: 560)
+
+                Button {
+                    model.refreshDiscoverWallpapers()
+                } label: {
+                    Label("Refresh Discover", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(MotionDockSecondaryButtonStyle())
+                .disabled(model.discoverIsLoading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else if model.discoverWallpapers.isEmpty {
+            emptyState(
+                icon: "sparkles.rectangle.stack",
+                title: "No marketplace wallpapers",
+                message: "Public wallpapers from Supabase will appear here."
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if visibleWallpapers.isEmpty {
+            MarketplaceStateCard(
+                systemImage: "line.3.horizontal.decrease.circle",
+                title: "No matching wallpapers",
+                message: "Try a different search term, category, or sort option.",
+                style: .neutral
+            )
+            .frame(maxWidth: 560)
+        } else {
+            ScrollView {
+                LazyVGrid(columns: discoverColumns, alignment: .leading, spacing: 18) {
+                    ForEach(visibleWallpapers) { item in
+                        DiscoverWallpaperCard(
+                            item: item,
+                            isSelected: model.selectedDiscoverWallpaper?.id == item.id,
+                            isLikeBusy: model.discoverLikeIsBusy(item),
+                            onSelect: {
+                                withAnimation(MotionDockTheme.animation) {
+                                    model.selectDiscoverWallpaper(item.id)
+                                }
+                            },
+                            onToggleLike: {
+                                model.toggleDiscoverLike(item)
+                            }
+                        )
+                    }
+                }
+                .padding(.trailing, 16)
+                .padding(.bottom, 28)
+            }
+            .scrollContentBackground(.hidden)
+        }
+    }
+
+    private var discoverStatusText: String {
+        if model.discoverUploadIsLoading {
+            return "Uploading"
+        }
+        if model.discoverIsLoading {
+            return "Loading"
+        }
+        if model.discoverWallpapers.isEmpty {
+            return "Empty"
+        }
+        if filteredDiscoverWallpapers.count != model.discoverWallpapers.count {
+            return "\(filteredDiscoverWallpapers.count) Showing"
+        }
+        return "\(model.discoverWallpapers.count) Available"
+    }
+
+    private var filteredDiscoverWallpapers: [DiscoverWallpaper] {
+        var items = model.discoverWallpapers
+
+        if let category = discoverCategoryFilter.category {
+            items = items.filter {
+                $0.categoryText.localizedCaseInsensitiveCompare(category.rawValue) == .orderedSame
+            }
+        }
+
+        let query = normalizedDiscoverSearchQuery
+        if !query.isEmpty {
+            items = items.filter {
+                discoverSearchHaystack(for: $0).contains(query)
+            }
+        }
+
+        switch discoverSortOption {
+        case .all:
+            return items
+        case .latest:
+            return items.sorted {
+                let left = $0.createdAt ?? ""
+                let right = $1.createdAt ?? ""
+                if left == right {
+                    return $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
+                }
+                return left > right
+            }
+        case .mostDownloaded:
+            return items.sorted {
+                if $0.downloads == $1.downloads {
+                    return $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
+                }
+                return $0.downloads > $1.downloads
+            }
+        case .liked:
+            return items.sorted {
+                if $0.likesCount == $1.likesCount {
+                    return $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
+                }
+                return $0.likesCount > $1.likesCount
+            }
+        }
+    }
+
+    private var normalizedDiscoverSearchQuery: String {
+        discoverSearchText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    private func discoverSearchHaystack(for item: DiscoverWallpaper) -> String {
+        [
+            item.displayTitle,
+            item.descriptionText,
+            item.categoryText,
+            item.uploaderText
+        ]
+        .joined(separator: " ")
+        .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        .lowercased()
+    }
+
+    private func clearDiscoverSelectionIfHidden() {
+        guard let selectedDiscoverWallpaperID = model.selectedDiscoverWallpaperID else {
+            return
+        }
+
+        if !filteredDiscoverWallpapers.contains(where: { $0.id == selectedDiscoverWallpaperID }) {
+            model.clearDiscoverSelection()
+        }
+    }
+
+    private var profilesPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                pageHeader(
+                    title: "Profiles",
+                    subtitle: "Sign in to publish wallpapers and keep creator attribution synced.",
+                    showsImport: false
+                )
+
+                if !model.isAuthenticated {
+                    emptyState(
+                        icon: "person.crop.circle.badge.checkmark",
+                        title: "Sign in required",
+                        message: "Use Supabase Auth to attach your account to marketplace uploads."
+                    )
+                    .frame(maxHeight: 220)
+                }
+
+                PremiumPanel {
+                    VStack(alignment: .leading, spacing: 18) {
+                        SectionHeader(model.isAuthenticated ? "Account" : "Authentication")
+
+                        InspectorInfoRow(label: "Status") {
+                            StatusPill(text: model.isAuthenticated ? "Signed In" : "Signed Out", isRunning: model.isAuthenticated)
+                        }
+
+                        if let user = model.authenticatedUser {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    Circle()
+                                        .fill(MotionDockTheme.accent.opacity(0.16))
+                                    Image(systemName: "person.crop.circle.fill")
+                                        .font(.system(size: 34, weight: .semibold))
+                                        .foregroundStyle(MotionDockTheme.cyan, MotionDockTheme.accent)
+                                }
+                                .frame(width: 58, height: 58)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(user.displayName)
+                                        .font(.title3.weight(.semibold))
+                                        .foregroundStyle(Color.white)
+                                        .lineLimit(1)
+                                    Text(user.subtitle)
+                                        .font(.callout)
+                                        .foregroundStyle(MotionDockTheme.secondaryText)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .textSelection(.enabled)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            LabeledControl(title: "Display Name") {
+                                HStack(spacing: 10) {
+                                    MotionDockTextField("Display name", text: $model.profileDisplayNameDraft)
+                                        .disabled(model.profileDisplayNameIsSaving)
+
+                                    Button {
+                                        model.saveProfileDisplayName()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            if model.profileDisplayNameIsSaving {
+                                                MotionDockLoadingView(compact: true)
+                                                    .frame(width: 34, height: 14)
+                                            } else {
+                                                Image(systemName: "checkmark")
+                                            }
+
+                                            Text(model.profileDisplayNameIsSaving ? "Saving" : "Save")
+                                                .lineLimit(1)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                    }
+                                    .buttonStyle(MotionDockSecondaryButtonStyle())
+                                    .frame(width: 104)
+                                    .disabled(!model.canSaveProfileDisplayName)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            InspectorInfoRow(label: "User ID") {
+                                Text(user.id)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(MotionDockTheme.secondaryText)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                            }
+
+                            InspectorInfoRow(label: "Email") {
+                                Text(user.email ?? "Not provided")
+                                    .foregroundStyle(MotionDockTheme.secondaryText)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                            }
+
+                            InspectorInfoRow(label: "Avatar URL") {
+                                Text(user.avatarUrl ?? "Not provided")
+                                    .foregroundStyle(MotionDockTheme.secondaryText)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Sign in with Google to publish wallpapers and keep creator attribution synced.")
+                                    .font(.callout)
+                                    .foregroundStyle(MotionDockTheme.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                if let configurationMessage = model.authConfigurationMessage {
+                                    MessageBanner(message: configurationMessage, style: .error)
+                                }
+
+                                if !model.isSupabaseConfigured {
+                                    supabaseConfigurationForm
+                                }
+                            }
+                        }
+
+                        if let message = model.authMessage {
+                            MessageBanner(
+                                message: message,
+                                style: message.localizedCaseInsensitiveContains("error")
+                                    || message.localizedCaseInsensitiveContains("invalid")
+                                    || message.localizedCaseInsensitiveContains("cancelled")
+                                    ? .error
+                                    : .neutral
+                            )
+                        }
+
+                        HStack(spacing: 10) {
+                            if model.isAuthenticated {
+                                Button {
+                                    model.signOutAccount()
+                                } label: {
+                                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                                }
+                                .buttonStyle(MotionDockSecondaryButtonStyle())
+
+                                Button {
+                                    model.useAnotherGoogleAccount()
+                                } label: {
+                                    Label("Use another Google account", systemImage: "person.2.badge.gearshape")
+                                }
+                                .buttonStyle(MotionDockSecondaryButtonStyle())
+                            } else {
+                                Button {
+                                    model.signInWithGoogle()
+                                } label: {
+                                    Label("Sign in with Google", systemImage: "person.crop.circle.badge.checkmark")
+                                }
+                                .buttonStyle(MotionDockPrimaryButtonStyle())
+                                .disabled(!model.isSupabaseConfigured)
+                            }
+                        }
+                        .disabled(model.authIsLoading)
+                    }
+                }
+
+                if model.isAuthenticated {
+                    myUploadsSection
+                }
+            }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 26)
+        }
+        .scrollContentBackground(.hidden)
+        .background {
+            MotionDockAmbientBackground()
+        }
+        .task(id: model.authenticatedUser?.id) {
+            if model.isAuthenticated && model.myUploads.isEmpty && !model.myUploadsIsLoading {
+                model.refreshMyUploads()
+            }
+        }
+    }
+
+    private var myUploadsSection: some View {
+        PremiumPanel {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    SectionHeader("My Uploads")
+
+                    Spacer(minLength: 12)
+
+                    Button {
+                        model.refreshMyUploads()
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(MotionDockSecondaryButtonStyle())
+                    .frame(width: 118)
+                    .disabled(model.myUploadsIsLoading)
+                }
+
+                if let message = model.myUploadsMessage {
+                    MessageBanner(
+                        message: message,
+                        style: isMarketplaceErrorMessage(message) ? .error : .neutral
+                    )
+                }
+
+                if model.myUploadsIsLoading && model.myUploads.isEmpty {
+                    MarketplaceStateCard(
+                        systemImage: "arrow.triangle.2.circlepath",
+                        title: "Loading Uploads",
+                        message: "Fetching wallpapers uploaded by your account.",
+                        style: .loading
+                    )
+                } else if model.myUploads.isEmpty {
+                    MarketplaceStateCard(
+                        systemImage: "square.and.arrow.up",
+                        title: "No uploads yet",
+                        message: "Your uploaded marketplace wallpapers will appear here.",
+                        style: .neutral
+                    )
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(model.myUploads) { item in
+                            MyUploadRow(
+                                item: item,
+                                isBusy: model.myUploadIsBusy(item),
+                                onEdit: {
+                                    editingMyUpload = item
+                                },
+                                onDelete: {
+                                    deletingMyUpload = item
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -373,7 +960,7 @@ struct ContentView: View {
                     showsImport: false
                 )
 
-                brandSettings
+                accountSettings
 
                 PremiumPanel {
                     VStack(alignment: .leading, spacing: 18) {
@@ -476,30 +1063,144 @@ struct ContentView: View {
         }
     }
 
-    private var brandSettings: some View {
+    private var accountSettings: some View {
         PremiumPanel {
-            HStack(alignment: .center, spacing: 18) {
-                MotionDockLogoView(size: 74)
+            VStack(alignment: .leading, spacing: 18) {
+                SectionHeader("MotionDock 계정")
 
-                VStack(alignment: .leading, spacing: 8) {
-                    SectionHeader("About")
+                InspectorInfoRow(label: "Status") {
+                    StatusPill(text: model.isAuthenticated ? "Signed In" : "Signed Out", isRunning: model.isAuthenticated)
+                }
 
-                    Text(MotionDockBrand.appName)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(Color.white)
+                if let user = model.authenticatedUser {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle()
+                                .fill(MotionDockTheme.accent.opacity(0.16))
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.system(size: 30, weight: .semibold))
+                                .foregroundStyle(MotionDockTheme.cyan, MotionDockTheme.accent)
+                        }
+                        .frame(width: 52, height: 52)
 
-                    Text(MotionDockBrand.tagline)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(user.displayName)
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(Color.white)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+
+                            Text(user.subtitle)
+                                .font(.callout)
+                                .foregroundStyle(MotionDockTheme.secondaryText)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    InspectorInfoRow(label: "Email") {
+                        Text(user.email ?? "Not provided")
+                            .foregroundStyle(MotionDockTheme.secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+
+                    InspectorInfoRow(label: "User ID") {
+                        Text(user.id)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(MotionDockTheme.secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+
+                    Button {
+                        model.signOutAccount()
+                    } label: {
+                        Label("로그아웃", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                    .buttonStyle(MotionDockSecondaryButtonStyle())
+                    .disabled(model.authIsLoading)
+                } else {
+                    Text("마켓플레이스 업로드에는 로그인이 필요합니다.")
                         .font(.callout)
                         .foregroundStyle(MotionDockTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Dock Wave")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(MotionDockTheme.cyanHighlight)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(MotionDockTheme.cyanHighlight.opacity(0.12))
-                        .clipShape(Capsule())
+                    if let configurationMessage = model.authConfigurationMessage {
+                        MessageBanner(message: configurationMessage, style: .error)
+                    }
+
+                    supabaseConfigurationForm
+
+                    Button {
+                        model.signInWithGoogle()
+                    } label: {
+                        Label("Sign in with Google", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                    .buttonStyle(MotionDockPrimaryButtonStyle())
+                    .disabled(model.authIsLoading || !model.isSupabaseConfigured)
                 }
+
+                if let message = model.authMessage {
+                    MessageBanner(
+                        message: message,
+                        style: message.localizedCaseInsensitiveContains("error")
+                            || message.localizedCaseInsensitiveContains("invalid")
+                            || message.localizedCaseInsensitiveContains("cancelled")
+                            ? .error
+                            : .neutral
+                    )
+                }
+            }
+        }
+    }
+
+    private var supabaseConfigurationForm: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            MessageBanner(
+                message: model.isSupabaseConfigured
+                    ? "Supabase settings are saved. Update them here if your project URL or anon key changed."
+                    : "Supabase project URL and anon key are required before Google sign-in can start.",
+                style: .neutral
+            )
+
+            LabeledControl(title: "Supabase URL") {
+                MotionDockTextField("https://YOUR_PROJECT_REF.supabase.co", text: $model.supabaseURLDraft)
+                    .frame(maxWidth: 520)
+            }
+
+            LabeledControl(title: "Anon Key") {
+                MotionDockSecureTextField("Supabase anon key", text: $model.supabaseAnonKeyDraft)
+                    .frame(maxWidth: 520)
+            }
+
+            HStack(alignment: .center, spacing: 10) {
+                Button {
+                    model.saveSupabaseConfiguration()
+                } label: {
+                    Label("Save Supabase Settings", systemImage: "checkmark.shield")
+                }
+                .buttonStyle(MotionDockSecondaryButtonStyle())
+                .disabled(!model.canSaveSupabaseConfiguration)
+
+                Text(model.supabaseConfigurationPath)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(MotionDockTheme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let message = model.supabaseConfigurationMessage {
+                MessageBanner(
+                    message: message,
+                    style: message.localizedCaseInsensitiveContains("saved") ? .neutral : .error
+                )
             }
         }
     }
@@ -508,6 +1209,14 @@ struct ContentView: View {
         PremiumPanel {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader("System")
+
+                LabeledControl(title: "Dock") {
+                    Toggle("Show in Dock", isOn: $showInDock)
+                        .toggleStyle(.switch)
+                        .onChange(of: showInDock) { newValue in
+                            model.setShowInDock(newValue)
+                        }
+                }
 
                 LabeledControl(title: "Login") {
                     Toggle("Start MotionDock when I log in", isOn: $startAtLoginEnabled)
@@ -530,11 +1239,24 @@ struct ContentView: View {
     private var marketplaceSettings: some View {
         PremiumPanel {
             VStack(alignment: .leading, spacing: 16) {
-                SectionHeader("Self-hosted Marketplace")
+                SectionHeader("Marketplace")
 
-                LabeledControl(title: "Server") {
-                    MotionDockTextField("http://127.0.0.1:8787", text: $model.marketplaceServerURLString)
-                        .frame(maxWidth: 420)
+                InspectorInfoRow(label: "Backend") {
+                    Text(model.marketplaceBackendText)
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                InspectorInfoRow(label: "Status") {
+                    StatusPill(text: marketplaceStatusText, isRunning: marketplaceStatusIsRunning)
+                }
+
+                if model.authConfigurationMessage != nil {
+                    LabeledControl(title: "Fallback Server") {
+                        MotionDockTextField("http://127.0.0.1:8787", text: $model.marketplaceServerURLString)
+                            .frame(maxWidth: 420)
+                    }
                 }
 
                 HStack(spacing: 10) {
@@ -552,10 +1274,14 @@ struct ContentView: View {
                         Label("Upload Selected", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(MotionDockSecondaryButtonStyle())
-                    .disabled(!model.canUploadSelectedItem || !model.profileIsLoggedIn || model.marketplaceIsLoading)
+                    .disabled(!model.canUploadSelectedItem || !model.isAuthenticated || model.marketplaceIsLoading)
                 }
 
-                if let message = model.marketplaceMessage {
+                if !model.isAuthenticated {
+                    MessageBanner(message: "Sign in from Profiles before uploading wallpapers.", style: .neutral)
+                }
+
+                if let message = model.marketplaceMessage, shouldShowMarketplaceBanner(message) {
                     MessageBanner(message: message, style: message.contains("error") || message.contains("invalid") ? .error : .neutral)
                 }
 
@@ -585,9 +1311,78 @@ struct ContentView: View {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(MotionDockTheme.border, lineWidth: 1)
                     }
+                } else {
+                    marketplaceStateCard
                 }
             }
         }
+    }
+
+    private var marketplaceStatusText: String {
+        if model.marketplaceIsLoading {
+            return "Loading"
+        }
+        if isMarketplaceErrorMessage(model.marketplaceMessage) {
+            return "Needs Attention"
+        }
+        if model.marketplaceItems.isEmpty {
+            return "Empty"
+        }
+        return "\(model.marketplaceItems.count) Available"
+    }
+
+    private var marketplaceStatusIsRunning: Bool {
+        !model.marketplaceIsLoading
+            && !model.marketplaceItems.isEmpty
+            && !isMarketplaceErrorMessage(model.marketplaceMessage)
+    }
+
+    @ViewBuilder
+    private var marketplaceStateCard: some View {
+        if model.marketplaceIsLoading {
+            MarketplaceStateCard(
+                systemImage: "arrow.triangle.2.circlepath",
+                title: "Loading Marketplace",
+                message: "Fetching the latest wallpapers from \(model.marketplaceBackendText).",
+                style: .loading
+            )
+        } else if let message = model.marketplaceMessage, isMarketplaceErrorMessage(message) {
+            MarketplaceStateCard(
+                systemImage: "exclamationmark.triangle",
+                title: "Marketplace Unavailable",
+                message: message,
+                style: .error
+            )
+        } else {
+            MarketplaceStateCard(
+                systemImage: "sparkles",
+                title: "No Wallpapers Yet",
+                message: marketplaceEmptyMessage,
+                style: .neutral
+            )
+        }
+    }
+
+    private var marketplaceEmptyMessage: String {
+        if model.authConfigurationMessage != nil {
+            return "Configure Supabase or start the local marketplace server, then refresh."
+        }
+        return "Refresh after creators publish wallpapers, or upload a selected local MP4, MOV, or GIF."
+    }
+
+    private func shouldShowMarketplaceBanner(_ message: String) -> Bool {
+        isMarketplaceErrorMessage(message) && !model.marketplaceItems.isEmpty
+    }
+
+    private func isMarketplaceErrorMessage(_ message: String?) -> Bool {
+        guard let message else {
+            return false
+        }
+        return message.localizedCaseInsensitiveContains("error")
+            || message.localizedCaseInsensitiveContains("invalid")
+            || message.localizedCaseInsensitiveContains("failed")
+            || message.localizedCaseInsensitiveContains("missing")
+            || message.localizedCaseInsensitiveContains("could not")
     }
 
     private func pageHeader(title: String, subtitle: String, showsImport: Bool) -> some View {
@@ -693,6 +1488,12 @@ struct ContentView: View {
         ]
     }
 
+    private var discoverColumns: [GridItem] {
+        [
+            GridItem(.adaptive(minimum: 210, maximum: 280), spacing: 18)
+        ]
+    }
+
     private var recentlyAddedItems: [WallpaperLibraryItem] {
         model.libraryItems.filter { !$0.isBuiltIn }
     }
@@ -730,7 +1531,47 @@ struct ContentView: View {
     }
 }
 
+private enum DiscoverSortOption: String, CaseIterable, Identifiable {
+    case all
+    case latest
+    case mostDownloaded
+    case liked
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "All"
+        case .latest:
+            return "Latest"
+        case .mostDownloaded:
+            return "Most Downloaded"
+        case .liked:
+            return "Liked"
+        }
+    }
+}
+
+private struct DiscoverCategoryFilter: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let category: MarketplaceCategory?
+
+    static let all = DiscoverCategoryFilter(id: "all", title: "All Categories", category: nil)
+
+    static let allCases: [DiscoverCategoryFilter] = [
+        .all
+    ] + MarketplaceCategory.allCases.map {
+        DiscoverCategoryFilter(id: $0.id, title: $0.rawValue, category: $0)
+    }
+}
+
 private enum SidebarSection: String, CaseIterable, Identifiable {
+    static let defaultSection: SidebarSection = .library
+
     case library
     case collections
     case favorites
@@ -740,6 +1581,15 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
     case settings
 
     var id: String { rawValue }
+
+    var resolvedForDisplay: SidebarSection {
+        switch self {
+        case .collections:
+            return Self.defaultSection
+        default:
+            return self
+        }
+    }
 
     var title: String {
         switch self {
@@ -771,7 +1621,7 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
         case .recentlyAdded:
             return "The wallpapers you imported most recently."
         case .discover:
-            return "Curated wallpapers are coming soon."
+            return "Browse public marketplace wallpapers."
         case .profiles:
             return "Manage the profile attached to uploads."
         case .settings:
@@ -828,7 +1678,6 @@ private enum SidebarSection: String, CaseIterable, Identifiable {
 private struct MotionDockSidebar: View {
     @Binding var selection: SidebarSection
     let libraryCount: Int
-    let collectionCount: Int
     let favoriteCount: Int
     let recentCount: Int
     let isRunning: Bool
@@ -845,7 +1694,6 @@ private struct MotionDockSidebar: View {
 
                 VStack(spacing: 8) {
                     sidebarButton(.library, count: libraryCount)
-                    sidebarButton(.collections, count: collectionCount)
                     sidebarButton(.favorites, count: favoriteCount)
                     sidebarButton(.recentlyAdded, count: recentCount)
                 }
@@ -915,10 +1763,7 @@ private struct WallpaperCard: View {
                 VStack(alignment: .leading, spacing: 12) {
                     WallpaperCardPreview(item: item, thumbnail: thumbnailStore.thumbnail(for: item))
                         .overlay(alignment: .topLeading) {
-                            HStack(spacing: 6) {
-                                MetadataBadge(WallpaperMetadata.fileType(for: item))
-                                MetadataBadge(WallpaperMetadata.resolution(for: item))
-                            }
+                            MetadataBadge(WallpaperMetadata.resolution(for: item))
                             .padding(12)
                         }
                         .overlay(alignment: .topTrailing) {
@@ -999,6 +1844,378 @@ private struct WallpaperCardPreview: View {
         .frame(minWidth: 0, maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .clipped()
+    }
+}
+
+private struct DiscoverWallpaperCard: View {
+    let item: DiscoverWallpaper
+    let isSelected: Bool
+    let isLikeBusy: Bool
+    let onSelect: () -> Void
+    let onToggleLike: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        MotionDockCard(isSelected: isSelected, isInteractive: isHovered) {
+            VStack(alignment: .leading, spacing: 12) {
+                MarketplacePreviewImage(item: item)
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(alignment: .topLeading) {
+                        MetadataBadge(item.categoryText.uppercased())
+                        .padding(12)
+                    }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(item.displayTitle)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.94))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text("by \(item.uploaderText) · \(item.createdAtText)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    HStack(spacing: 12) {
+                        MarketplaceLikeButton(
+                            isLiked: item.isLiked,
+                            likesCount: item.likesCount,
+                            isBusy: isLikeBusy,
+                            action: onToggleLike
+                        )
+                        MarketplaceMetric(systemImage: "arrow.down.circle.fill", value: item.downloads)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .clipped()
+        .onTapGesture(perform: onSelect)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+private struct MarketplaceMetric: View {
+    let systemImage: String
+    let value: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.caption2.weight(.bold))
+                .frame(width: 12)
+            Text("\(value)")
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(MotionDockTheme.secondaryText)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+private struct MarketplaceLikeButton: View {
+    let isLiked: Bool
+    let likesCount: Int
+    let isBusy: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: isLiked ? "heart.fill" : "heart")
+                    .font(.caption2.weight(.bold))
+                    .frame(width: 12)
+                Text("\(likesCount)")
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isLiked ? MotionDockTheme.cyan : MotionDockTheme.secondaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isLiked ? MotionDockTheme.accent.opacity(0.16) : Color.white.opacity(0.06))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(isLiked ? MotionDockTheme.cyan.opacity(0.28) : Color.white.opacity(0.08), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .opacity(isBusy ? 0.58 : 1)
+        .fixedSize(horizontal: true, vertical: false)
+        .help(isLiked ? "Unlike" : "Like")
+    }
+}
+
+private struct MarketplacePreviewImage: View {
+    let item: DiscoverWallpaper
+    var prominent = false
+
+    var body: some View {
+        ZStack {
+            marketplacePlaceholder
+
+            if let thumbnailURL = item.thumbnailURLValue {
+                AsyncImage(url: thumbnailURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .transition(.opacity.combined(with: .scale(scale: 1.01)))
+                    case .failure:
+                        marketplacePlaceholder
+                    case .empty:
+                        marketplacePlaceholder
+                            .overlay {
+                                MotionDockLoadingView(compact: true)
+                                    .frame(width: 70, height: 28)
+                            }
+                    @unknown default:
+                        marketplacePlaceholder
+                    }
+                }
+            }
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.04),
+                    Color.black.opacity(prominent ? 0.16 : 0.28)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: prominent ? MotionDockTheme.radius : 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: prominent ? MotionDockTheme.radius : 14, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+        }
+        .clipped()
+    }
+
+    private var marketplacePlaceholder: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    MotionDockTheme.card,
+                    MotionDockTheme.accent.opacity(0.26),
+                    MotionDockTheme.surface
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            LiquidReflectionView(lineCount: 6, amplitude: prominent ? 8 : 5, intensity: 0.44, animated: true)
+                .frame(height: prominent ? 90 : 58)
+                .opacity(0.78)
+
+            Image(systemName: "sparkles")
+                .font(.system(size: prominent ? 42 : 30, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.20))
+        }
+    }
+}
+
+private struct MarketplaceDetailPanel: View {
+    @ObservedObject var model: AppModel
+    let item: DiscoverWallpaper?
+
+    @State private var reportingItem: DiscoverWallpaper?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let item {
+                VStack(alignment: .leading, spacing: 18) {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        detailContent(for: item)
+                            .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .topLeading)
+                            .padding(.bottom, 4)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .topLeading)
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
+                    .clipped()
+
+                    detailActions(for: item)
+                }
+                .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .topLeading)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
+            } else {
+                EmptyStateView(
+                    icon: "sparkles.rectangle.stack",
+                    title: "No marketplace item",
+                    message: "Select a Discover wallpaper to view details."
+                )
+                .frame(width: MotionDockLayout.inspectorContentWidth)
+                .frame(maxHeight: .infinity)
+                .clipped()
+            }
+        }
+        .padding(.horizontal, MotionDockLayout.inspectorHorizontalPadding)
+        .padding(.vertical, MotionDockLayout.inspectorVerticalPadding)
+        .frame(width: MotionDockLayout.inspectorWidth, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(MotionDockTheme.secondarySurface)
+        .clipped()
+        .sheet(item: $reportingItem) { item in
+            ReportWallpaperSheet(model: model, item: item)
+        }
+    }
+
+    private func detailContent(for item: DiscoverWallpaper) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            MarketplacePreviewImage(item: item, prominent: true)
+                .frame(
+                    width: MotionDockLayout.inspectorContentWidth,
+                    height: MotionDockLayout.inspectorContentWidth * 11.0 / 16.0
+                )
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.displayTitle)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
+                    .clipped()
+
+                StatusPill(
+                    text: model.discoverBusyItemID == item.id
+                        ? "Adding to Library"
+                        : discoverActionStatusText(for: item),
+                    isRunning: item.hasDownloadableVideo
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
+            }
+            .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
+            .clipped()
+
+            VStack(spacing: 12) {
+                DetailInfoRow(label: "Category", value: item.categoryText)
+                DetailInfoRow(label: "Likes", value: "\(item.likesCount)")
+                DetailInfoRow(label: "Downloads", value: "\(item.downloads)")
+                DetailInfoRow(label: "Uploader", value: item.uploaderText, truncationMode: .middle)
+                DetailInfoRow(label: "Added", value: item.createdAtText, truncationMode: .middle)
+            }
+            .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
+            .clipped()
+
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader("Description")
+                Text(item.descriptionText)
+                    .font(.callout)
+                    .foregroundStyle(MotionDockTheme.secondaryText)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
+                    .clipped()
+            }
+            .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
+            .clipped()
+
+            if let message = model.discoverMessage {
+                MessageBanner(
+                    message: message,
+                    style: message.localizedCaseInsensitiveContains("error")
+                        || message.localizedCaseInsensitiveContains("invalid")
+                        || message.localizedCaseInsensitiveContains("failed")
+                        || message.localizedCaseInsensitiveContains("could not")
+                        ? .error
+                        : .neutral
+                )
+                .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
+                .clipped()
+            }
+        }
+        .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .topLeading)
+        .clipped()
+    }
+
+    private func detailActions(for item: DiscoverWallpaper) -> some View {
+        let isBusy = model.discoverBusyItemID == item.id
+        let isLikeBusy = model.discoverLikeIsBusy(item)
+        let isReportBusy = model.discoverReportIsBusy(item)
+        let isInLibrary = model.discoverWallpaperIsInLibrary(item)
+
+        return VStack(spacing: 10) {
+            DetailActionButton(
+                title: item.isLiked ? "Liked" : "Like",
+                systemImage: item.isLiked ? "heart.fill" : "heart",
+                style: .secondary,
+                isDisabled: isLikeBusy,
+                action: {
+                    model.toggleDiscoverLike(item)
+                }
+            )
+
+            if item.hasDownloadableVideo {
+                if isBusy {
+                    MotionDockLoadingView(compact: true)
+                        .frame(width: 74, height: 20)
+                        .padding(.bottom, 2)
+                }
+
+                DetailActionButton(
+                    title: isBusy ? "Adding to Library..." : (isInLibrary ? "Already in Library" : "Add to Library"),
+                    systemImage: "plus",
+                    style: .primary,
+                    isDisabled: isBusy,
+                    action: {
+                        model.requestAddDiscoverWallpaperToLibrary(item)
+                    }
+                )
+            } else {
+                DetailActionButton(
+                    title: "Add Unavailable",
+                    systemImage: "slash.circle",
+                    style: .secondary,
+                    isDisabled: true,
+                    action: {}
+                )
+            }
+
+            DetailActionButton(
+                title: isReportBusy ? "Reporting..." : "Report",
+                systemImage: "exclamationmark.bubble",
+                style: .secondary,
+                isDisabled: isReportBusy,
+                action: {
+                    reportingItem = item
+                }
+            )
+        }
+        .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .center)
+        .clipped()
+    }
+
+    private func discoverActionStatusText(for item: DiscoverWallpaper) -> String {
+        if model.discoverWallpaperIsInLibrary(item) {
+            return "Already in Library"
+        }
+        return item.hasDownloadableVideo ? "Add Available" : "Preview Only"
     }
 }
 
@@ -1088,43 +2305,11 @@ private struct InspectorPanel: View {
             VStack(spacing: 12) {
                 DetailInfoRow(label: "Resolution", value: WallpaperMetadata.resolution(for: item))
                 DetailInfoRow(label: "Duration", value: WallpaperMetadata.duration(for: item))
-                DetailInfoRow(label: "File Type", value: WallpaperMetadata.fileType(for: item))
                 DetailInfoRow(label: "File Size", value: WallpaperMetadata.fileSize(for: item))
                 DetailInfoRow(label: "Added", value: WallpaperMetadata.added(for: item))
-                DetailInfoRow(
-                    label: "Path",
-                    value: WallpaperMetadata.path(for: item),
-                    truncationMode: .middle
-                )
             }
             .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
             .clipped()
-
-            if item.kind == .motion {
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader("Motion")
-                        .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
-                        .clipped()
-
-                    Picker("Scene", selection: model.bindingForSelectedScene()) {
-                        ForEach(MotionScene.allCases) { scene in
-                            Text(scene.label).tag(scene)
-                        }
-                    }
-                    .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
-                    .clipped()
-
-                    Picker("Palette", selection: model.bindingForSelectedPalette()) {
-                        ForEach(MotionPalette.allCases) { palette in
-                            Text(palette.label).tag(palette)
-                        }
-                    }
-                    .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
-                    .clipped()
-                }
-                .frame(width: MotionDockLayout.inspectorContentWidth, alignment: .leading)
-                .clipped()
-            }
 
             if let errorMessage = model.errorMessage {
                 MessageBanner(message: errorMessage, style: .error)
@@ -1342,6 +2527,585 @@ private struct URLImportSheet: View {
         }
         .padding(24)
         .frame(width: 440)
+    }
+}
+
+private struct DiscoverUploadSheet: View {
+    @ObservedObject var model: AppModel
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedFileURL: URL?
+    @State private var title = ""
+    @State private var category: MarketplaceCategory = .cinematic
+    @State private var description = ""
+    @State private var hasAcceptedTerms = false
+    @State private var isUploadTermsPresented = false
+    @State private var didStartUpload = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 14) {
+                MotionDockLogoView(size: 44)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Upload Wallpaper")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color.white)
+
+                    Text("Publish an MP4 or MOV wallpaper to Discover.")
+                        .font(.callout)
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if !model.isAuthenticated {
+                MessageBanner(
+                    message: "Sign in with Google before uploading marketplace wallpapers.",
+                    style: .neutral
+                )
+            }
+
+            if let message = model.discoverMessage {
+                MessageBanner(
+                    message: message,
+                    style: isUploadErrorMessage(message) ? .error : .neutral
+                )
+            }
+
+            PremiumPanel {
+                VStack(alignment: .leading, spacing: 16) {
+                    uploadFileRow
+
+                    LabeledControl(title: "Title") {
+                        MotionDockTextField("Wallpaper title", text: $title)
+                    }
+
+                    LabeledControl(title: "Category") {
+                        MotionDockOptionMenu(
+                            options: MarketplaceCategory.allCases,
+                            selection: $category,
+                            title: { $0.rawValue }
+                        )
+                        .frame(width: 220)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Description")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(MotionDockTheme.secondaryText)
+
+                        TextEditor(text: $description)
+                            .font(.callout)
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .frame(minHeight: 92)
+                            .background(MotionDockTheme.secondarySurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(MotionDockTheme.border, lineWidth: 1)
+                            }
+                    }
+
+                    termsConsentRow
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(MotionDockSecondaryButtonStyle())
+                .disabled(model.discoverUploadIsLoading)
+
+                Button {
+                    guard let selectedFileURL else {
+                        return
+                    }
+                    model.uploadDiscoverMarketplaceWallpaper(
+                        fileURL: selectedFileURL,
+                        title: title,
+                        description: description,
+                        category: category,
+                        confirmedRights: hasAcceptedTerms
+                    )
+                    didStartUpload = true
+                } label: {
+                    HStack(spacing: 8) {
+                        if model.discoverUploadIsLoading {
+                            MotionDockLoadingView(compact: true)
+                                .frame(width: 44, height: 16)
+                        }
+                        Text(model.discoverUploadIsLoading ? "Uploading..." : "Upload")
+                    }
+                }
+                .buttonStyle(MotionDockPrimaryButtonStyle())
+                .disabled(!canUpload)
+            }
+        }
+        .padding(24)
+        .frame(width: 620)
+        .background(MotionDockTheme.background)
+        .sheet(isPresented: $isUploadTermsPresented) {
+            MarketplaceUploadTermsSheet()
+        }
+        .onChange(of: model.discoverUploadIsLoading) { isLoading in
+            guard didStartUpload, !isLoading else {
+                return
+            }
+
+            if model.discoverMessage?.localizedCaseInsensitiveContains("complete") == true {
+                hasAcceptedTerms = false
+            }
+            didStartUpload = false
+        }
+    }
+
+    private var uploadFileRow: some View {
+        LabeledControl(title: "File") {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedFileURL?.lastPathComponent ?? "No file selected")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Text(MarketplaceUploadPolicy.supportedR2UploadTypesText)
+                        .font(.caption)
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    chooseUploadFile()
+                } label: {
+                    Label("Choose", systemImage: "folder")
+                }
+                .buttonStyle(MotionDockSecondaryButtonStyle())
+                .frame(width: 120)
+                .disabled(model.discoverUploadIsLoading)
+            }
+        }
+    }
+
+    private var canUpload: Bool {
+        model.isAuthenticated
+            && selectedFileURL != nil
+            && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && hasAcceptedTerms
+            && !model.discoverUploadIsLoading
+    }
+
+    private var termsConsentRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                hasAcceptedTerms.toggle()
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: hasAcceptedTerms ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(hasAcceptedTerms ? MotionDockTheme.accent : MotionDockTheme.secondaryText)
+                        .frame(width: 22, alignment: .center)
+
+                    Text(MarketplaceUploadTerms.shortConsent)
+                        .font(.caption)
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.discoverUploadIsLoading)
+
+            Button {
+                isUploadTermsPresented = true
+            } label: {
+                Label("View Terms", systemImage: "doc.text.magnifyingglass")
+            }
+            .buttonStyle(MotionDockSecondaryButtonStyle())
+            .frame(width: 150)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func chooseUploadFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.mpeg4Movie, .quickTimeMovie]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.title = "Choose Marketplace Wallpaper"
+        panel.message = "Choose an MP4 or MOV wallpaper to upload."
+
+        guard panel.runModal() == .OK, let url = panel.urls.first else {
+            return
+        }
+
+        selectedFileURL = url
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            title = url.deletingPathExtension().lastPathComponent
+        }
+    }
+
+    private func isUploadErrorMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("error")
+            || lowercased.contains("invalid")
+            || lowercased.contains("failed")
+            || lowercased.contains("missing")
+            || lowercased.contains("not configured")
+            || lowercased.contains("unsupported")
+    }
+}
+
+private struct MarketplaceUploadTermsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(MarketplaceUploadTerms.title)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.white)
+
+                Text(MarketplaceUploadTerms.subtitle)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(MotionDockTheme.cyan)
+            }
+
+            ScrollView(.vertical, showsIndicators: true) {
+                Text(MarketplaceUploadTerms.body)
+                    .font(.callout)
+                    .foregroundStyle(MotionDockTheme.secondaryText)
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(minHeight: 360)
+
+            HStack {
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+                .buttonStyle(MotionDockPrimaryButtonStyle())
+                .frame(width: 120)
+            }
+        }
+        .padding(24)
+        .frame(width: 620, height: 560)
+        .background(MotionDockTheme.background)
+    }
+}
+
+private struct ReportWallpaperSheet: View {
+    @ObservedObject var model: AppModel
+    let item: DiscoverWallpaper
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var reason: MarketplaceReportReason = .copyright
+    @State private var details = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 14) {
+                Image(systemName: "exclamationmark.bubble")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(MotionDockTheme.accent)
+                    .frame(width: 44, height: 44)
+                    .background(MotionDockTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Report Wallpaper")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color.white)
+
+                    Text(item.displayTitle)
+                        .font(.callout)
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if !model.isAuthenticated {
+                MessageBanner(
+                    message: "Sign in with Google before reporting marketplace wallpapers.",
+                    style: .neutral
+                )
+            }
+
+            if let message = model.discoverMessage {
+                MessageBanner(
+                    message: message,
+                    style: isReportErrorMessage(message) ? .error : .neutral
+                )
+            }
+
+            PremiumPanel {
+                VStack(alignment: .leading, spacing: 16) {
+                    LabeledControl(title: "Reason") {
+                        MotionDockOptionMenu(
+                            options: MarketplaceReportReason.allCases,
+                            selection: $reason,
+                            title: { $0.rawValue }
+                        )
+                        .frame(width: 220)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Details")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(MotionDockTheme.secondaryText)
+
+                        TextEditor(text: $details)
+                            .font(.callout)
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .frame(minHeight: 110)
+                            .background(MotionDockTheme.secondarySurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(MotionDockTheme.border, lineWidth: 1)
+                            }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(MotionDockSecondaryButtonStyle())
+                .disabled(model.discoverReportIsBusy(item))
+
+                Button {
+                    model.reportDiscoverWallpaper(
+                        item,
+                        reason: reason,
+                        details: details
+                    )
+                    dismiss()
+                } label: {
+                    Text(model.discoverReportIsBusy(item) ? "Reporting..." : "Submit Report")
+                }
+                .buttonStyle(MotionDockPrimaryButtonStyle())
+                .disabled(!model.isAuthenticated || model.discoverReportIsBusy(item))
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
+        .background(MotionDockTheme.background)
+    }
+
+    private func isReportErrorMessage(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("error")
+            || lowercased.contains("invalid")
+            || lowercased.contains("failed")
+            || lowercased.contains("could not")
+            || lowercased.contains("already reported")
+    }
+}
+
+private struct MyUploadRow: View {
+    let item: DiscoverWallpaper
+    let isBusy: Bool
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            MarketplacePreviewImage(item: item)
+                .frame(width: 148, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Text(item.displayTitle)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.94))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    MetadataBadge(item.categoryText.uppercased())
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(item.descriptionText)
+                    .font(.caption)
+                    .foregroundStyle(MotionDockTheme.secondaryText)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 12) {
+                    MarketplaceMetric(systemImage: "heart.fill", value: item.likesCount)
+                    MarketplaceMetric(systemImage: "arrow.down.circle.fill", value: item.downloads)
+                    Text(item.createdAtText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+
+            if isBusy {
+                MotionDockLoadingView(compact: true)
+                    .frame(width: 58, height: 20)
+            }
+
+            Button {
+                onEdit()
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .buttonStyle(MotionDockSecondaryButtonStyle())
+            .frame(width: 92)
+            .disabled(isBusy)
+
+            Button {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .buttonStyle(MotionDockSecondaryButtonStyle())
+            .frame(width: 104)
+            .disabled(isBusy)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MotionDockTheme.secondarySurface.opacity(0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(MotionDockTheme.border, lineWidth: 1)
+        }
+        .clipped()
+    }
+}
+
+private struct MyUploadEditSheet: View {
+    @ObservedObject var model: AppModel
+    let item: DiscoverWallpaper
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var category: MarketplaceCategory
+    @State private var description: String
+
+    init(model: AppModel, item: DiscoverWallpaper) {
+        self.model = model
+        self.item = item
+        _title = State(initialValue: item.displayTitle)
+        _category = State(initialValue: Self.initialCategory(for: item))
+        _description = State(initialValue: item.description ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 14) {
+                MarketplacePreviewImage(item: item)
+                    .frame(width: 128, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipped()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Edit Upload")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color.white)
+
+                    Text("Update marketplace metadata for this wallpaper.")
+                        .font(.callout)
+                        .foregroundStyle(MotionDockTheme.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let message = model.myUploadsMessage {
+                MessageBanner(
+                    message: message,
+                    style: message.localizedCaseInsensitiveContains("could not") ? .error : .neutral
+                )
+            }
+
+            PremiumPanel {
+                VStack(alignment: .leading, spacing: 16) {
+                    LabeledControl(title: "Title") {
+                        MotionDockTextField("Wallpaper title", text: $title)
+                    }
+
+                    LabeledControl(title: "Category") {
+                        MotionDockOptionMenu(
+                            options: MarketplaceCategory.allCases,
+                            selection: $category,
+                            title: { $0.rawValue }
+                        )
+                        .frame(width: 220)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Description")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(MotionDockTheme.secondaryText)
+
+                        TextEditor(text: $description)
+                            .font(.callout)
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .frame(minHeight: 104)
+                            .background(MotionDockTheme.secondarySurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(MotionDockTheme.border, lineWidth: 1)
+                            }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .buttonStyle(MotionDockSecondaryButtonStyle())
+                .disabled(model.myUploadIsBusy(item))
+
+                Button {
+                    model.updateMyUpload(
+                        item,
+                        title: title,
+                        description: description,
+                        category: category
+                    )
+                    dismiss()
+                } label: {
+                    Label("Save Changes", systemImage: "checkmark")
+                }
+                .buttonStyle(MotionDockPrimaryButtonStyle())
+                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.myUploadIsBusy(item))
+            }
+        }
+        .padding(24)
+        .frame(width: 620)
+        .background(MotionDockTheme.background)
+    }
+
+    private static func initialCategory(for item: DiscoverWallpaper) -> MarketplaceCategory {
+        MarketplaceCategory.allCases.first {
+            $0.rawValue.localizedCaseInsensitiveCompare(item.categoryText) == .orderedSame
+        } ?? .other
     }
 }
 
@@ -1639,6 +3403,96 @@ private struct DetailActionButton: View {
     }
 }
 
+private enum MarketplaceStateCardStyle {
+    case neutral
+    case loading
+    case error
+}
+
+private struct MarketplaceStateCard: View {
+    let systemImage: String
+    let title: String
+    let message: String
+    var style: MarketplaceStateCardStyle = .neutral
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(iconBackground)
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(iconForeground)
+            }
+            .frame(width: 42, height: 42)
+            .overlay(alignment: .bottom) {
+                if style == .loading {
+                    MotionDockLoadingView(compact: true)
+                        .frame(width: 44, height: 16)
+                        .offset(y: 16)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(MotionDockTheme.secondaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MotionDockTheme.secondarySurface)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        }
+        .clipped()
+    }
+
+    private var iconBackground: Color {
+        switch style {
+        case .neutral:
+            return MotionDockTheme.accent.opacity(0.14)
+        case .loading:
+            return MotionDockTheme.cyan.opacity(0.14)
+        case .error:
+            return Color.red.opacity(0.14)
+        }
+    }
+
+    private var iconForeground: Color {
+        switch style {
+        case .neutral:
+            return MotionDockTheme.accent
+        case .loading:
+            return MotionDockTheme.cyan
+        case .error:
+            return Color.red.opacity(0.92)
+        }
+    }
+
+    private var borderColor: Color {
+        switch style {
+        case .neutral:
+            return MotionDockTheme.border
+        case .loading:
+            return MotionDockTheme.cyan.opacity(0.16)
+        case .error:
+            return Color.red.opacity(0.18)
+        }
+    }
+}
+
 private struct MarketplaceCompactRow: View {
     let item: MarketplaceItem
     let isBusy: Bool
@@ -1652,9 +3506,18 @@ private struct MarketplaceCompactRow: View {
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.title)
-                    .font(.callout.weight(.medium))
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(item.title)
+                        .font(.callout.weight(.medium))
+                        .lineLimit(1)
+
+                    if item.moderationStatusValue != .approved {
+                        StatusPill(
+                            text: item.moderationStatusValue.displayText,
+                            isRunning: false
+                        )
+                    }
+                }
                 Text("by \(item.uploaderDisplayText)")
                     .font(.caption)
                     .foregroundStyle(MotionDockTheme.secondaryText)
@@ -1670,11 +3533,11 @@ private struct MarketplaceCompactRow: View {
 
             Button("Download", action: onDownload)
                 .buttonStyle(.borderless)
-                .disabled(isBusy || item.supportedKind == nil)
+                .disabled(isBusy || item.supportedKind == nil || !item.moderationStatusValue.allowsDownload)
 
             Button("Apply", action: onApply)
                 .buttonStyle(.borderless)
-                .disabled(isBusy || item.supportedKind == nil)
+                .disabled(isBusy || item.supportedKind == nil || !item.moderationStatusValue.allowsDownload)
         }
         .padding(12)
         .background(MotionDockTheme.secondarySurface)
@@ -1875,6 +3738,39 @@ private struct MotionDockTextField: View {
     }
 }
 
+private struct MotionDockSecureTextField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    init(_ placeholder: String, text: Binding<String>) {
+        self.placeholder = placeholder
+        _text = text
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundStyle(MotionDockTheme.secondaryText.opacity(0.72))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            SecureField("", text: $text)
+                .textFieldStyle(.plain)
+                .foregroundStyle(Color.white.opacity(0.92))
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(MotionDockTheme.secondarySurface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(MotionDockTheme.border, lineWidth: 1)
+        }
+    }
+}
+
 private struct MotionDockDivider: View {
     var axis: Axis = .vertical
 
@@ -1936,20 +3832,6 @@ private enum WallpaperMetadata {
             return fileName(for: item)
         case .web:
             return item.webURLString ?? "Web URL"
-        }
-    }
-
-    static func fileType(for item: WallpaperLibraryItem) -> String {
-        switch item.kind {
-        case .motion:
-            return "MOTION"
-        case .video:
-            let ext = localURL(for: item)?.pathExtension.uppercased()
-            return ext?.isEmpty == false ? ext ?? "MP4" : "MP4"
-        case .gif:
-            return "GIF"
-        case .web:
-            return "WEB"
         }
     }
 
@@ -2019,17 +3901,6 @@ private enum WallpaperMetadata {
 
     static func added(for item: WallpaperLibraryItem) -> String {
         item.isBuiltIn ? "Built-in" : "Imported"
-    }
-
-    static func path(for item: WallpaperLibraryItem) -> String {
-        switch item.kind {
-        case .motion:
-            return "Built-in renderer"
-        case .video, .gif:
-            return localURL(for: item)?.path ?? item.detail
-        case .web:
-            return item.webURLString ?? "Web URL"
-        }
     }
 
     static func localURL(for item: WallpaperLibraryItem) -> URL? {
