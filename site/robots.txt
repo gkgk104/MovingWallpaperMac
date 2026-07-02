@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gkgk104.github.io/MovingWallpaperMac/sitemap.xml

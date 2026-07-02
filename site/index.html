@@ -3,78 +3,223 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MotionDock legal information and privacy policy.">
-  <title>MotionDock Legal</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #09090b;
-      color: #f4f4f5;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      min-height: 100vh;
-      margin: 0;
-      display: grid;
-      place-items: center;
-      padding: 32px;
-      background:
-        radial-gradient(circle at 15% 10%, rgba(124, 92, 255, 0.22), transparent 32rem),
-        radial-gradient(circle at 85% 90%, rgba(61, 198, 255, 0.16), transparent 34rem),
-        #09090b;
-    }
-
-    main {
-      width: min(100%, 680px);
-      padding: clamp(32px, 7vw, 64px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 28px;
-      background: rgba(24, 24, 27, 0.82);
-      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
-      backdrop-filter: blur(20px);
-    }
-
-    .mark {
-      display: inline-grid;
-      place-items: center;
-      width: 52px;
-      height: 52px;
-      margin-bottom: 28px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, #8b5cf6, #38bdf8);
-      font-size: 24px;
-      font-weight: 800;
-      box-shadow: 0 12px 36px rgba(124, 92, 255, 0.32);
-    }
-
-    h1 { margin: 0 0 12px; font-size: clamp(36px, 8vw, 58px); letter-spacing: -0.045em; }
-    p { margin: 0 0 32px; color: #a1a1aa; font-size: 18px; line-height: 1.65; }
-
-    a {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 18px;
-      border-radius: 12px;
-      background: #f4f4f5;
-      color: #18181b;
-      font-weight: 700;
-      text-decoration: none;
-    }
-
-    a:hover { background: #ffffff; transform: translateY(-1px); }
-    a:focus-visible { outline: 3px solid #38bdf8; outline-offset: 4px; }
-  </style>
+  <meta name="theme-color" content="#05080d">
+  <meta name="description" content="MotionDock brings beautiful, performance-friendly live wallpapers to macOS. Built natively for Apple Silicon.">
+  <meta name="keywords" content="MotionDock, macOS live wallpaper, Apple Silicon, animated wallpaper, Mac wallpaper">
+  <meta name="author" content="MotionDock">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MotionDock">
+  <meta property="og:title" content="MotionDock — Bring Your Desktop to Life">
+  <meta property="og:description" content="Beautiful live wallpapers for macOS. Designed for Apple Silicon.">
+  <meta property="og:image" content="https://gkgk104.github.io/MovingWallpaperMac/assets/brandmark.png">
+  <meta property="og:url" content="https://gkgk104.github.io/MovingWallpaperMac/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MotionDock — Bring Your Desktop to Life">
+  <meta name="twitter:description" content="Beautiful live wallpapers for macOS. Designed for Apple Silicon.">
+  <meta name="twitter:image" content="https://gkgk104.github.io/MovingWallpaperMac/assets/brandmark.png">
+  <link rel="canonical" href="https://gkgk104.github.io/MovingWallpaperMac/">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="apple-touch-icon" href="assets/brandmark.png">
+  <link rel="stylesheet" href="styles.css?v=20260703-icon1">
+  <script src="script.js" defer></script>
+  <title>MotionDock — Live Wallpapers for macOS</title>
 </head>
 <body>
-  <main>
-    <div class="mark" aria-hidden="true">M</div>
-    <h1>MotionDock</h1>
-    <p>Legal information for MotionDock, a live wallpaper app for macOS.</p>
-    <a href="./privacy/">Read the Privacy Policy <span aria-hidden="true">→</span></a>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header" data-header>
+    <nav class="nav shell" aria-label="Primary navigation">
+      <a class="brand" href="./" aria-label="MotionDock home">
+        <img class="brand-wordmark" src="assets/wordmark.png" width="200" height="40" alt="MotionDock">
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links" data-nav-toggle>
+        <span class="sr-only">Open menu</span>
+        <span></span><span></span>
+      </button>
+      <div class="nav-links" id="nav-links" data-nav-links>
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#performance">Performance</a>
+        <a href="#faq">FAQ</a>
+        <a class="button button-small button-primary" href="#download" data-app-store>App Store</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero shell section-pad" aria-labelledby="hero-title">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="hero-copy reveal">
+        <p class="eyebrow"><span></span> Live wallpaper, refined</p>
+        <h1 id="hero-title">Bring Your<br>Desktop to Life.</h1>
+        <p class="hero-subtitle">Beautiful live wallpapers for macOS.<br>Smooth, native, and easy on your system.</p>
+        <div class="button-row">
+          <a class="button button-primary" href="#download" data-app-store>
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.79 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.1ZM12.03 7.25C11.88 5.02 13.69 3.18 15.77 3c.29 2.58-2.34 4.5-3.74 4.25Z"/></svg>
+            Download on the App Store
+          </a>
+        </div>
+        <p class="availability" data-store-status>Coming soon to the Mac App Store.</p>
+      </div>
+
+      <div class="hero-visual reveal" data-reveal-delay="1" aria-label="MotionDock live wallpaper running on a MacBook">
+        <div class="preview-orbit preview-orbit-one" aria-hidden="true"></div>
+        <div class="preview-orbit preview-orbit-two" aria-hidden="true"></div>
+        <div class="macbook">
+          <div class="macbook-frame">
+            <img class="macbook-frame-image" src="assets/macbook-frame-transparent.png" width="1604" height="981" alt="" aria-hidden="true">
+            <div class="macbook-screen">
+              <video data-hero-video autoplay muted loop playsinline preload="metadata" poster="assets/hero-wallpaper-poster.jpg" aria-label="Ocean live wallpaper playing on a Mac desktop">
+                <source src="assets/hero-wallpaper.mp4" type="video/mp4">
+              </video>
+              <div class="screen-sheen" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="features" aria-labelledby="features-title">
+      <div class="section-heading reveal">
+        <p class="eyebrow"><span></span> Built around you</p>
+        <h2 id="features-title">Everything in one place.</h2>
+        <p>Find, set, and publish—without extra setup.</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card reveal">
+          <div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 7.5 8-4.5 8 4.5-8 4.5-8-4.5Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/></svg></div>
+          <h3>Built-in Experiences</h3>
+          <p>Start with curated cinematic scenes, ready from day one.</p>
+        </article>
+        <article class="feature-card reveal" data-reveal-delay="1">
+          <div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v13H4zM8 5.5v13M8 9.5h12M8 14h12"/></svg></div>
+          <h3>Marketplace</h3>
+          <p>Explore community creations without leaving the app.</p>
+        </article>
+        <article class="feature-card reveal">
+          <div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 12 3 3 6-7M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z"/></svg></div>
+          <h3>One Click Apply</h3>
+          <p>Choose a scene and let MotionDock handle the rest.</p>
+        </article>
+        <article class="feature-card reveal" data-reveal-delay="1">
+          <div class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4 4 4M5 12v7h14v-7"/></svg></div>
+          <h3>Upload &amp; Share</h3>
+          <p>Publish your own work for the community.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section shell how-section" id="how-it-works" aria-labelledby="how-title">
+      <div class="section-heading centered reveal">
+        <p class="eyebrow"><span></span> Effortless by design</p>
+        <h2 id="how-title">From browse to live<br>in seconds.</h2>
+      </div>
+      <div class="steps">
+        <article class="step reveal">
+          <span class="step-number">01</span>
+          <div class="step-visual browse-visual" aria-hidden="true">
+            <div class="search-pill">⌕ <span>Search MotionDock</span></div>
+            <div class="result-row active"><i></i><span><b>Quiet Current</b><small>MotionDock</small></span><em>›</em></div>
+            <div class="result-row"><i></i><span><b>Soft Horizon</b><small>MotionDock</small></span><em>›</em></div>
+          </div>
+          <h3>Browse</h3>
+          <p>Find a scene that fits your space.</p>
+        </article>
+        <div class="step-connector" aria-hidden="true">→</div>
+        <article class="step reveal" data-reveal-delay="1">
+          <span class="step-number">02</span>
+          <div class="step-visual apply-visual" aria-hidden="true">
+            <div class="apply-window"><span>Quiet Current</span><button><i>✓</i> Applied</button></div>
+            <div class="click-ring"></div>
+          </div>
+          <h3>Apply</h3>
+          <p>Set it instantly.</p>
+        </article>
+        <div class="step-connector" aria-hidden="true">→</div>
+        <article class="step reveal" data-reveal-delay="2">
+          <span class="step-number">03</span>
+          <div class="step-visual enjoy-visual" aria-hidden="true">
+            <div class="mini-desktop"><div class="desktop-wave"><i></i><i></i></div><div class="dock"><span></span><span></span><span></span><span></span><span></span></div></div>
+          </div>
+          <h3>Enjoy</h3>
+          <p>Let subtle movement reshape your everyday workspace.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section performance-section" id="performance" aria-labelledby="performance-title">
+      <div class="shell performance-layout">
+        <div class="performance-visual reveal" aria-hidden="true">
+          <div class="silicon-chip"><span></span><b>M-series</b><small>Ready</small></div>
+          <div class="flow-ring ring-one"></div><div class="flow-ring ring-two"></div><div class="flow-ring ring-three"></div>
+          <div class="metric-badge metric-one"><i></i><span><small>CPU</small><b>Efficient</b></span></div>
+          <div class="metric-badge metric-two"><i></i><span><small>ENERGY</small><b>Low impact</b></span></div>
+        </div>
+        <div class="performance-copy reveal" data-reveal-delay="1">
+          <p class="eyebrow"><span></span> Engineered to disappear</p>
+          <h2 id="performance-title">Smooth by nature.<br>Light by design.</h2>
+          <p>Native playback keeps every transition fluid while smart policies keep resource use restrained.</p>
+          <ul class="performance-list">
+            <li><i>✓</i><span><b>Native macOS Experience</b><small>Built to look and feel right at home.</small></span></li>
+            <li><i>✓</i><span><b>Apple Silicon Optimized</b><small>Tuned for modern Mac hardware.</small></span></li>
+            <li><i>✓</i><span><b>Battery Friendly</b><small>Smart playback policies reduce impact.</small></span></li>
+            <li><i>✓</i><span><b>Low CPU Usage</b><small>Runs quietly in the background.</small></span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell faq-section" id="faq" aria-labelledby="faq-title">
+      <div class="section-heading centered reveal">
+        <p class="eyebrow"><span></span> Good to know</p>
+        <h2 id="faq-title">Frequently asked questions.</h2>
+      </div>
+      <div class="faq-list reveal">
+        <details>
+          <summary>Does it support Apple Silicon?<span aria-hidden="true">＋</span></summary>
+          <p>Yes. It is tuned for every M-series Mac.</p>
+        </details>
+        <details>
+          <summary>Can I upload my own wallpapers?<span aria-hidden="true">＋</span></summary>
+          <p>Yes. Signed-in users can upload supported motion wallpapers they own or have permission to share.</p>
+        </details>
+        <details>
+          <summary>Where are uploaded videos stored?<span aria-hidden="true">＋</span></summary>
+          <p>Published marketplace videos are stored securely using MotionDock’s cloud infrastructure. Local wallpapers you import remain on your Mac.</p>
+        </details>
+        <details>
+          <summary>Does it affect performance?<span aria-hidden="true">＋</span></summary>
+          <p>Activity drops automatically whenever the wallpaper is covered or inactive.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="cta-section shell" id="download" aria-labelledby="cta-title">
+      <div class="cta-card reveal">
+        <div class="cta-wave" aria-hidden="true"></div>
+        <img class="cta-brand-wave" src="assets/wave-mark.png" alt="" aria-hidden="true">
+        <img class="cta-brandmark" src="assets/logomark.png" width="150" height="100" alt="MotionDock logo">
+        <h2 id="cta-title">Make every glance<br>feel new.</h2>
+        <p>A fresh background is waiting.</p>
+        <a class="button button-light" href="#download" data-app-store>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.79 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.1ZM12.03 7.25C11.88 5.02 13.69 3.18 15.77 3c.29 2.58-2.34 4.5-3.74 4.25Z"/></svg>
+          Get MotionDock
+        </a>
+      </div>
+    </section>
   </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-main">
+      <a class="brand" href="./" aria-label="MotionDock home"><img class="brand-wordmark footer-wordmark" src="assets/wordmark.png" width="180" height="36" alt="MotionDock"></a>
+      <nav aria-label="Legal navigation">
+        <a href="privacy/">Privacy Policy</a>
+        <a href="terms/">Terms of Service</a>
+        <a href="contact/">Contact</a>
+      </nav>
+    </div>
+    <div class="shell footer-bottom"><span>© <span data-year>2026</span> MotionDock. All rights reserved.</span><span>Built with restraint.</span></div>
+  </footer>
+  <div class="toast" role="status" aria-live="polite" data-toast></div>
 </body>
 </html>

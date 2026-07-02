@@ -1,4 +1,4 @@
-name: Deploy privacy site to GitHub Pages
+name: Deploy MotionDock website to GitHub Pages
 
 on:
   push:
